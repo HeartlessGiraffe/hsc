@@ -1,0 +1,123 @@
+#!/usr/bin/python3
+import os
+import sys
+import subprocess
+
+def main():
+    if len(sys.argv) < 2 or len(sys.argv) > 3:
+        print("Usage: python hscd.py <file_path> [--lex] [--parse] [--codegen] [--takcy]")
+        sys.exit(1)
+
+    # Parse arguments
+    file_path = None
+    use_lexer = False
+    use_parser = False
+    use_codegen = False
+    use_tacky = False
+
+    for arg in sys.argv[1:]:
+        if arg == "--lex":
+            use_lexer = True
+        elif arg == "--parse":
+            use_parser = True
+        elif arg == "--codegen":
+            use_codegen = True
+        elif arg == "--tacky":
+            use_tacky = True
+        else:
+            file_path = arg
+
+    # Ensure only one of [--lex], [--parse], [--codegen] [--tacky] is enabled
+    if sum([use_lexer, use_parser, use_codegen, use_tacky]) > 1:
+        print("Error: Only one of [--lex], [--parse], [--codegen] or [--tacky] can be enabled at a time.")
+        sys.exit(1)
+
+    if not file_path:
+        print("Error: Missing file path.")
+        sys.exit(1)
+
+    if not os.path.isfile(file_path):  
+        print(f"Error: File '{file_path}' does not exist.")
+        sys.exit(1)
+
+    # Step 1: Preprocessing
+    preprocessed_file = f"{os.path.splitext(file_path)[0]}.i"
+    try:
+        subprocess.run(["gcc", "-E", "-P", file_path, "-o", preprocessed_file], check=True)
+        print(f"Preprocessing successful. Preprocessed file created: {preprocessed_file}")
+    except subprocess.CalledProcessError:
+        print("Error: Preprocessing failed.")
+        sys.exit(1)
+
+    # If --lex is provided, process with hsc-lexer and exit
+    if use_lexer:
+        try:
+            subprocess.run(["hsc-lexer", preprocessed_file], check=True)
+            print(f"Lexical analysis successful using hsc-lexer on: {preprocessed_file}")
+        except subprocess.CalledProcessError:
+            print("Error: Lexical analysis failed.")
+            os.remove(preprocessed_file)
+            sys.exit(1)
+        os.remove(preprocessed_file)
+        sys.exit(0)
+
+    # If --parse is provided, process with hsc-parser and exit
+    if use_parser:
+        try:
+            subprocess.run(["hsc-parser", preprocessed_file], check=True)
+            print(f"Parsing successful using hsc-parser on: {preprocessed_file}")
+        except subprocess.CalledProcessError:
+            print("Error: Parsing failed.")
+            os.remove(preprocessed_file)
+            sys.exit(1)
+        os.remove(preprocessed_file)
+        sys.exit(0)
+
+    # If --tacky is provided, process with hsc-codegenerator and exit
+    if use_tacky:
+        try:
+            subprocess.run(["hsc-tacky", preprocessed_file], check=True)
+            print(f"Tacky successful using hsc-tacky on: {preprocessed_file}")
+        except subprocess.CalledProcessError:
+            print("Error: Tacky failed.")
+            os.remove(preprocessed_file)
+            sys.exit(1)
+        os.remove(preprocessed_file)
+        sys.exit(0)
+
+    # If --codegen is provided, process with hsc-codegenerator and exit
+    if use_codegen:
+        try:
+            subprocess.run(["hsc-codegenerator", preprocessed_file], check=True)
+            print(f"Code generation successful using hsc-codegenerator on: {preprocessed_file}")
+        except subprocess.CalledProcessError:
+            print("Error: Code generation failed.")
+            os.remove(preprocessed_file)
+            sys.exit(1)
+        os.remove(preprocessed_file)
+        sys.exit(0)
+
+    # Step 2: Compilation
+    compiled_file = f"{os.path.splitext(file_path)[0]}.s"
+    try:
+        subprocess.run(["hscc", preprocessed_file], check=True)
+        print(f"Compilation successful. Assembly file created: {compiled_file}")
+    except subprocess.CalledProcessError:
+        print("Error: Compilation failed.")
+        os.remove(preprocessed_file)
+        sys.exit(1)
+    os.remove(preprocessed_file)
+
+    output_file = os.path.splitext(file_path)[0]
+    # Step 3: Assembly and Linking
+    try:
+        subprocess.run(["gcc", compiled_file, "-o", output_file], check=True)
+        print(f"Assembly and linking successful. Executable created: {output_file}")
+    except subprocess.CalledProcessError:
+        print("Error: Assembly and linking failed.")
+        os.remove(compiled_file)
+        sys.exit(1)
+    os.remove(compiled_file)
+
+if __name__ == "__main__":
+    main()

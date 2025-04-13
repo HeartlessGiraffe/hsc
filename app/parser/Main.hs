@@ -21,4 +21,4 @@ main = do
         Left err -> do
           print err
           exitFailure
-    _ -> putStrLn "Usage: lexer <file-path>"
+    _ -> putStrLn "Usage: hsc-parser <file-path>"

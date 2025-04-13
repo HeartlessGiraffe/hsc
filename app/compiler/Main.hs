@@ -1,8 +1,9 @@
 module Main (main) where
 
-import AssemblyGen.AssemblyGen (convertProgram)
+import AssemblyGen.AssemblyGen (convertProgramWithFixedInstructions)
 import Lexer.Lexer (lexer)
 import Parser.Parser (evalParse)
+import TACKY.TACKY
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
 import Emission.Emission
@@ -17,7 +18,7 @@ main = do
       case lexer content of
         Right tokens -> case evalParse tokens of
           Right ast -> do
-            let assembly = constructAProgram (convertProgram ast)
+            let assembly = constructAProgram ((convertProgramWithFixedInstructions (genTKProgram ast)))
             let outputFilePath = replaceExtension filePath "s"
             writeFile outputFilePath assembly
             putStrLn $ "Assembly written to " ++ outputFilePath
@@ -27,4 +28,4 @@ main = do
         Left err -> do
           print err
           exitFailure
-    _ -> putStrLn "Usage: lexer <file-path>"
+    _ -> putStrLn "Usage: hscc <file-path>"

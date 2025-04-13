@@ -39,4 +39,11 @@ packages:
       size: 784
   original:
     hackage: filepath-1.4.2.2
+- completed:
+    hackage: containers-0.6.7@sha256:4aad61c33b21e453e5d18a465e674898fded282f233ffd154b48acc540c89537,2655
+    pantry-tree:
+      sha256: d3430bcc4beafe609d6c5cd4a607549ee4ffe0eafc2ebb9c87b5e7b1b20b24d8
+      size: 2902
+  original:
+    hackage: containers-0.6.7
 snapshots: []

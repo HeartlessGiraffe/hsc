@@ -1,10 +1,12 @@
 module Main (main) where
 
 import Lexer.Lexer (lexer)
+import Parser.Parser (evalParse)
+import TACKY.TACKY (genTKProgram)
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
+import Utils (prettyPrint)
 
--- 一个命令行程序，从文件读取代码文本，并将其传递给词法分析器
 main :: IO ()
 main = do
   args <- getArgs
@@ -12,8 +14,12 @@ main = do
     [filePath] -> do
       content <- readFile filePath
       case lexer content of
-        Right tokens -> print tokens
+        Right tokens -> case evalParse tokens of
+          Right ast -> putStrLn $ prettyPrint (genTKProgram ast)
+          Left err -> do
+            print err
+            exitFailure
         Left err -> do
           print err
           exitFailure
-    _ -> putStrLn "Usage: hsc-lexer <file-path>"
+    _ -> putStrLn "Usage: hsc-tacky <file-path>"

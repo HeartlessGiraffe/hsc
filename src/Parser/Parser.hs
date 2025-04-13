@@ -8,16 +8,18 @@ module Parser.Parser
     FuncDef (..),
     Statement (..),
     Exp (..),
+    UnaryOperator (..), 
 
     -- * Parsers
-    Parser,
     Expect,
     ExpectError (..),
+    Parser,
     evalParse,
     parseProgram,
     parseFuncDef,
     parseStatement,
     parseExp,
+    parseUnop,
     parseIdentifier,
     parseInt,
   )
@@ -29,14 +31,23 @@ import Lexer.Lexer
 import qualified Text.PrettyPrint as PP
 import Utils (Pretty (..))
 
--- * AST
+-- * SC AST
+
+-- ** AST Definition
+
+-- program = Program(function_definition)
+-- function_definition = Function(identifier name, statement body)
+-- statement = Return(exp)
+-- exp = Constant(int) | Unary(unary_operator, exp)
+-- unary_operator = Complement | Negate
 
 newtype Identifier = Identifier
   { unIdenityfier :: String
   }
   deriving (Show, Eq)
 
-data Program = Program FuncDef deriving (Show, Eq)
+data Program = Program FuncDef 
+  deriving (Show, Eq)
 
 data FuncDef = Function
   { _funcName :: Identifier,
@@ -44,11 +55,16 @@ data FuncDef = Function
   }
   deriving (Show, Eq)
 
-data Statement = Return Exp deriving (Show, Eq)
+data Statement = Return Exp 
+  deriving (Show, Eq)
 
-data Exp = Constant Int deriving (Show, Eq)
+data Exp = Constant Int | Unary UnaryOperator Exp 
+  deriving (Show, Eq)
 
--- * Pretty Printing
+data UnaryOperator = Complement | Negate 
+  deriving (Show, Eq)
+
+-- ** Pretty
 
 instance Pretty Identifier where
   pretty (Identifier name) = PP.text name
@@ -68,14 +84,35 @@ instance Pretty Statement where
 instance Pretty Exp where
   pretty (Constant value) =
     PP.text "Constant (" <> PP.int value <> PP.text ")"
+  pretty (Unary uOp e) = 
+    PP.text "Unary (" <> pretty uOp <> PP.text " (" <> pretty e <> PP.text ")" <> PP.text ")"
+
+instance Pretty UnaryOperator where 
+  pretty Complement = PP.text "Complement"
+  pretty Negate = PP.text "Negate"
 
 -- * Parsers
 
+-- <program> ::= <function>
+-- <function> ::= "int" <identifier> "(" "void" ")" "{" <statement> "}"
+-- <statement> ::= "return" <exp> ";"
+-- <exp> ::= <int> | <unop> <exp> | "(" <exp> ")"
+-- <unop> ::= "-" | "~"
+-- <identifier> ::= ? An identifier token ?
+-- <int> ::= ? A constant token ?
+
 data ExpectError = ExpectError
-  { expected :: Maybe Token,
+  { expected :: [Token],
     found :: Maybe Token
   }
   deriving (Show)
+
+throwExpectError :: [Token] -> Maybe Token -> Parser a
+throwExpectError expecting meet = 
+  throwError $ ExpectError expecting meet
+
+nothingExpected :: [Token]
+nothingExpected = []
 
 type Expect = Either ExpectError
 
@@ -83,13 +120,25 @@ type Parser a = StateT Tokens Expect a
 
 expect :: Token -> Parser ()
 expect expectedToken = do
-  tokens <- get
-  case tokens of
-    (foundToken : rest) -> do
+  nextToken <- peek
+  case nextToken of
+    Just foundToken -> do
       if expectedToken == foundToken
-        then put rest
-        else throwError $ ExpectError (Just expectedToken) (Just foundToken)
-    [] -> throwError $ ExpectError (Just expectedToken) Nothing
+        then takeToken
+        else throwExpectError [expectedToken] (Just foundToken)
+    Nothing -> throwExpectError [expectedToken] Nothing
+
+peek :: Parser (Maybe Token)
+peek = do 
+  tokens <- get 
+  case tokens of 
+    (foundToken : _) -> return (Just foundToken)
+    [] -> return Nothing
+
+takeToken :: Parser ()
+takeToken = do 
+  tokens <- get 
+  put $ drop 1 tokens
 
 -- | Parse a program and return the AST
 evalParse :: Tokens -> Expect Program
@@ -101,11 +150,11 @@ evalParse = evalStateT parseProgram
 parseProgram :: Parser Program
 parseProgram = do
   program <- parseFuncDef
-  rest <- get
-  case rest of
-    token : _ -> throwError $ ExpectError Nothing (Just token)
-    _ -> return (Program program)
-
+  nextToken <- peek
+  case nextToken of
+    Nothing -> return (Program program)
+    others -> throwExpectError nothingExpected others
+    
 -- | Parse a function definition
 --
 -- <function> ::= "int" <identifier> "(" "void" ")" "{" <statement> "}"
@@ -133,37 +182,66 @@ parseStatement = do
 
 -- | Parse a expression
 --
--- <exp> ::= <int>
+-- <exp> ::= <int> | <unop> <exp> | "(" <exp> ")
 parseExp :: Parser Exp
 parseExp = do
-  Constant <$> parseInt
+  nextToken <- peek 
+  case nextToken of 
+    Just (TConstant _) -> Constant <$> parseInt
+    Just TBitwiseComple -> do 
+      operator <- parseUnop 
+      Unary operator <$> parseExp
+    Just TNeg -> do 
+      operator <- parseUnop 
+      Unary operator <$> parseExp
+    Just TLeftParen -> do 
+      takeToken
+      innerExp <- parseExp 
+      expect TRightParen
+      return innerExp
+    others -> 
+      throwExpectError [TConstant 0, TBitwiseComple, TNeg, TLeftParen] others
+
+
+-- | Parse a unaryOperator
+--
+-- <unop> ::= "-" | "~"
+parseUnop :: Parser UnaryOperator
+parseUnop = do 
+  nextToken <- peek 
+  case nextToken of 
+    Just TBitwiseComple -> do 
+      takeToken
+      return Complement
+    Just TNeg -> do 
+      takeToken
+      return Negate
+    others -> 
+      throwExpectError [TBitwiseComple, TNeg] others
 
 -- | Parse an identifier
 --
 -- <identifier> ::= ? An identifier token ?
 parseIdentifier :: Parser Identifier
 parseIdentifier = do
-  tokens <- get
-  case tokens of
-    (TIdentifier i : rest) -> do
-      put rest
+  nextToken <- peek
+  case nextToken of
+    Just (TIdentifier i) -> do
+      takeToken
       return (Identifier i)
-    (other : _) -> do
-      throwError $ ExpectError (Just (TIdentifier "")) (Just other)
-    [] -> do
-      throwError $ ExpectError (Just (TIdentifier "")) Nothing
+    others -> 
+      throwExpectError [TIdentifier ""] others
 
 -- | Parse an integer
 --
 -- <int> ::= ? An integer token ?
 parseInt :: Parser Int
 parseInt = do
-  tokens <- get
-  case tokens of
-    (TConstant i : rest) -> do
-      put rest
+  nextToken <- peek
+  case nextToken of
+    Just (TConstant i) -> do
+      takeToken
       return i
-    (other : _) -> do
-      throwError $ ExpectError (Just (TConstant 0)) (Just other)
-    [] -> do
-      throwError $ ExpectError (Just (TConstant 0)) Nothing
+    others -> 
+      throwExpectError [TConstant 0] others
+      
