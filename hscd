@@ -5,7 +5,7 @@ import subprocess
 
 def main():
     if len(sys.argv) < 2 or len(sys.argv) > 3:
-        print("Usage: python hscd.py <file_path> [--lex] [--parse] [--codegen] [--takcy]")
+        print("Usage: hscd <file_path> [--lex] [--parse] [--codegen] [--tacky]")
         sys.exit(1)
 
     # Parse arguments
