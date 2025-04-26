@@ -1,7 +1,9 @@
-module Utils (
-  Pretty(..),
-  prettyPrint,
-  ) where 
+module Utils
+  ( Pretty (..),
+    prettyPrint,
+  )
+where
+
 import qualified Text.PrettyPrint as PP
 
 -- | A typeclass for pretty printing

@@ -3,25 +3,31 @@
 {-# HLINT ignore "Use newtype instead of data" #-}
 
 -- | An IR similar to TAC defined in the book Writing a C Compiler
-module TACKY.TACKY (
-    -- * TACKY AST
+module TACKY.TACKY
+  ( -- * TACKY AST
+
     -- ** AST Definition
-    TKIdentifier(..),
-    TKProgram(..),
-    TKFuncDef(..),
-    TKInstruction(..),
-    TKVal(..),
-    TKUnaryOperator(..),
+    TKIdentifier (..),
+    TKProgram (..),
+    TKFuncDef (..),
+    TKInstruction (..),
+    TKVal (..),
+    TKUnaryOperator (..),
+    TKBinaryOperator (..),
+
     -- * TAKCY Generation
+
     -- ** TACKYState, including generating Names for temporary variables
-    TACKYGenState(..),
+    TACKYGenState (..),
     initTACKYGenState,
     instuctionAppend,
     TACKYGen,
     makeTemporary,
+
     -- ** Generating TACKY
-    genTKProgram
-) where
+    genTKProgram,
+  )
+where
 
 import Control.Monad.State
 import Parser.Parser
@@ -33,10 +39,13 @@ import Utils (Pretty (..))
 -- ** AST Definition
 
 -- program = Program(function_definition)
--- function_definition = Function(identifier, 1 instruction* body)
--- instruction = Return(val) | Unary(unary_operator, val src, val dst)
+-- function_definition = Function(identifier, instruction* body)
+-- instruction = Return(val)
+--             | Unary(unary_operator, val src, val dst)
+--             | Binary(binary_operator, val src1, val src2, val dst)
 -- val = Constant(int) | Var(identifier)
 -- unary_operator = Complement | Negate
+-- binary_operator = Add | Subtract | Multiply | Divide | Remainder
 
 newtype TKIdentifier = TKIdentifier
   {unTKIdentifier :: String}
@@ -53,8 +62,14 @@ data TKFuncDef = TKFunction
 data TKInstruction
   = TKReturn TKVal
   | TKUnary
-      { _operator :: TKUnaryOperator,
+      { _uoperator :: TKUnaryOperator,
         _src :: TKVal,
+        _dst :: TKVal
+      }
+  | TKBinary
+      { _boperator :: TKBinaryOperator,
+        _src1 :: TKVal,
+        _src2 :: TKVal,
         _dst :: TKVal
       }
   deriving (Show, Eq)
@@ -62,7 +77,14 @@ data TKInstruction
 data TKVal = TKConstant Int | TKVar TKIdentifier
   deriving (Show, Eq)
 
+isTKConstant :: TKVal -> Bool
+isTKConstant (TKConstant _) = True
+isTKConstant _ = False
+
 data TKUnaryOperator = TKComplement | TKNegate
+  deriving (Show, Eq)
+
+data TKBinaryOperator = TKAdd | TKSubtract | TKMultiply | TKDivide | TKRemainder
   deriving (Show, Eq)
 
 -- ** Pretty
@@ -80,9 +102,14 @@ instance Pretty TKFuncDef where
 
 instance Pretty TKInstruction where
   pretty (TKReturn expr) =
-    PP.text "TKReturn (" <> pretty expr <> PP.text ")"
+    PP.text "TKReturn(" <> pretty expr <> PP.text ")"
   pretty (TKUnary op src dst) =
-    PP.text "TKUnary (" <> pretty op <> PP.text ", " <> pretty src <> PP.text ", " <> pretty dst <> PP.text ")"
+    PP.text "TKUnary(" <> pretty op <> PP.text ", " <> pretty src <> PP.text ", " <> pretty dst <> PP.text ")"
+  pretty (TKBinary op src1 src2 dst) =
+    if isTKConstant src1 && isTKConstant src2 && isTKConstant dst
+      then
+        PP.text "TKBinary(" <> pretty op <> PP.text ", " <> pretty src1 <> PP.text ", " <> pretty src2 <> PP.text ", " <> pretty dst <> PP.text ")"
+      else PP.text "TKBinary(" PP.$$ PP.nest 2 (pretty op) <> PP.text ", " PP.$$ PP.nest 2 (pretty src1) PP.$$ PP.nest 2 (pretty src2) <> PP.text ", " PP.$$ PP.nest 2 (pretty dst) PP.$$ PP.text ")"
 
 instance Pretty TKVal where
   pretty (TKConstant c) = PP.text "TKConstant " <> PP.text (show c)
@@ -91,6 +118,13 @@ instance Pretty TKVal where
 instance Pretty TKUnaryOperator where
   pretty TKComplement = PP.text "TKComplement"
   pretty TKNegate = PP.text "TKNegate"
+
+instance Pretty TKBinaryOperator where
+  pretty TKAdd = PP.text "TKAdd"
+  pretty TKSubtract = PP.text "TKSubtract"
+  pretty TKMultiply = PP.text "TKMultiply"
+  pretty TKDivide = PP.text "TKDivide"
+  pretty TKRemainder = PP.text "TKRemainder"
 
 -- * TAKCY Generation
 
@@ -118,8 +152,8 @@ makeTemporary = do
   return (TKIdentifier ("tmp." <> show i))
 
 returnTACKY :: (TKVal, TACKYGenState) -> [TKInstruction]
-returnTACKY (val, TACKYGenState _ is) = 
-    is <> [TKReturn val]
+returnTACKY (val, TACKYGenState _ is) =
+  is <> [TKReturn val]
 
 -- ** Generating TACKY
 
@@ -130,14 +164,17 @@ returnTACKY (val, TACKYGenState _ is) =
 -- statement = Return(exp)
 -- exp = Constant(int) | Unary(unary_operator, exp)
 -- unary_operator = Complement | Negate
-
+--
 -- to:
 --
 -- program = Program(function_definition)
--- function_definition = Function(identifier, 1 instruction* body)
--- instruction = Return(val) | Unary(unary_operator, val src, val dst)
+-- function_definition = Function(identifier, instruction* body)
+-- instruction = Return(val)
+--             | Unary(unary_operator, val src, val dst)
+--             | Binary(binary_operator, val src1, val src2, val dst)
 -- val = Constant(int) | Var(identifier)
 -- unary_operator = Complement | Negate
+-- binary_operator = Add | Subtract | Multiply | Divide | Remainder
 
 genTKIdentifier :: Identifier -> TKIdentifier
 genTKIdentifier (Identifier i) = TKIdentifier i
@@ -161,7 +198,22 @@ emitTAKCY (Unary op inner) = do
       tackyOp = genTKUnaryOperator op
   modify (instuctionAppend (TKUnary tackyOp src dst))
   return dst
+emitTAKCY (Binary op e1 e2) = do
+  v1 <- emitTAKCY e1
+  v2 <- emitTAKCY e2
+  dstName <- makeTemporary
+  let dst = TKVar dstName
+      tackyOp = genTKBinaryOperator op
+  modify (instuctionAppend (TKBinary tackyOp v1 v2 dst))
+  return dst
 
 genTKUnaryOperator :: UnaryOperator -> TKUnaryOperator
 genTKUnaryOperator Complement = TKComplement
 genTKUnaryOperator Negate = TKNegate
+
+genTKBinaryOperator :: BinaryOperator -> TKBinaryOperator
+genTKBinaryOperator Add = TKAdd
+genTKBinaryOperator Subtract = TKSubtract
+genTKBinaryOperator Multiply = TKMultiply
+genTKBinaryOperator Divide = TKDivide
+genTKBinaryOperator Remainder = TKRemainder

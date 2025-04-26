@@ -6,6 +6,12 @@ module Lexer.Lexer
 
     -- * tokens and their regular expressions
     Token (..),
+    Precedence,
+    isTBinary,
+    minimumPrecedence,
+    precedence,
+    mTIsBinary,
+    mTPrecedenceGEt,
     Tokens,
     LexerError (..),
 
@@ -16,11 +22,11 @@ where
 
 import Data.Bifunctor (first)
 import Data.Char (isSpace)
+import Data.List (sortOn)
 import Data.Maybe (fromJust, listToMaybe, mapMaybe)
+import qualified Data.Ord as Ord
 import Text.Read (readMaybe)
 import Text.Regex.PCRE ((=~))
-import Data.List (sortOn)
-import qualified Data.Ord as Ord
 
 -- * 基本类型
 
@@ -60,9 +66,17 @@ data Token
   | -- | 按位补
     TBitwiseComple
   | -- | 相反数
-    TNeg 
+    TNeg
   | -- | 自减
     TDecre
+  | -- | 加
+    TPlus
+  | -- | 乘
+    TMul
+  | -- | 除以
+    TDiv
+  | -- | 求余
+    TRem
   deriving (Show, Eq)
 
 -- | Tokens
@@ -120,12 +134,28 @@ semicolonRegex :: TokenRegex
 semicolonRegex = ";"
 
 -- | 按位补
-bitwiseCompleRegex :: TokenRegex 
+bitwiseCompleRegex :: TokenRegex
 bitwiseCompleRegex = "~"
 
 -- | 相反数
 negRegex :: TokenRegex
 negRegex = "-"
+
+-- | 加
+plusRegex :: TokenRegex
+plusRegex = "\\+"
+
+-- | 乘
+mulRegex :: TokenRegex
+mulRegex = "\\*"
+
+-- | 除以
+divRegex :: TokenRegex
+divRegex = "/"
+
+-- | 求余
+remRegex :: TokenRegex
+remRegex = "%"
 
 -- | 自减
 decreRegex :: TokenRegex
@@ -152,8 +182,40 @@ tokenRegexes =
           (semicolonRegex, TSemicolon),
           (bitwiseCompleRegex, TBitwiseComple),
           (negRegex, TNeg),
-          (decreRegex, TDecre)
+          (decreRegex, TDecre),
+          (plusRegex, TPlus),
+          (mulRegex, TMul),
+          (divRegex, TDiv),
+          (remRegex, TRem)
         ]
+
+-- | Token是二元表达式
+isTBinary :: Token -> Bool
+isTBinary TNeg = True
+isTBinary TPlus = True
+isTBinary TMul = True
+isTBinary TDiv = True
+isTBinary TRem = True
+isTBinary _ = False
+
+type Precedence = Int
+
+minimumPrecedence :: Precedence
+minimumPrecedence = 0
+
+precedence :: Token -> Precedence
+precedence TPlus = 45
+precedence TNeg = 45
+precedence TMul = 50
+precedence TDiv = 50
+precedence TRem = 50
+precedence _ = -1
+
+mTIsBinary :: Maybe Token -> Bool
+mTIsBinary mToken = (isTBinary <$> mToken) == Just True
+
+mTPrecedenceGEt :: Precedence -> Maybe Token -> Bool
+mTPrecedenceGEt pre = maybe False (\x -> precedence x >= pre)
 
 -- | 把单次匹配处理成 Token
 toToken :: Match -> Token -> Token
@@ -162,10 +224,10 @@ toToken match (TConstant _) = TConstant (fromJust $ readMaybe match)
 toToken _ t = t
 
 -- | Token 长度
-lenToken :: Token -> Int 
-lenToken (TIdentifier iStr) = length iStr 
+lenToken :: Token -> Int
+lenToken (TIdentifier iStr) = length iStr
 lenToken (TConstant cInt) = length (show cInt)
-lenToken TIntKeyword = 3 
+lenToken TIntKeyword = 3
 lenToken TVoidKeyword = 4
 lenToken TReturnKeyword = 6
 lenToken TLeftParen = 1
@@ -176,7 +238,10 @@ lenToken TSemicolon = 1
 lenToken TBitwiseComple = 1
 lenToken TNeg = 1
 lenToken TDecre = 2
-
+lenToken TPlus = 1
+lenToken TMul = 1
+lenToken TDiv = 1
+lenToken TRem = 1
 
 -- | 如果标识符是关键字, 则将其视为关键字
 identifierToKeyword :: Token -> Token
@@ -202,7 +267,7 @@ findLongestMatch input = findMaxLengthMatch $ mapMaybe findMatch tokenRegexes
                   remaining = drop (length match) input
                in Just (toToken match token, remaining)
     findMaxLengthMatch :: [(Token, CodeString)] -> Maybe (Token, CodeString)
-    findMaxLengthMatch matches = listToMaybe $ sortOn (Ord.Down . lenToken . fst) matches 
+    findMaxLengthMatch matches = listToMaybe $ sortOn (Ord.Down . lenToken . fst) matches
 
 -- | 词法分析器, 带有已处理的Token, 方便输出报错信息
 lexerWithState :: CodeString -> [Token] -> Either LexerError [Token]
