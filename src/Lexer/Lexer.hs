@@ -6,6 +6,11 @@ module Lexer.Lexer
 
     -- * tokens and their regular expressions
     Token (..),
+    emptyToken,
+    singleToken,
+    tokensFromList,
+    dropToken,
+    lookupToken,
     Precedence,
     isTBinary,
     minimumPrecedence,
@@ -27,6 +32,7 @@ import Data.Maybe (fromJust, listToMaybe, mapMaybe)
 import qualified Data.Ord as Ord
 import Text.Read (readMaybe)
 import Text.Regex.PCRE ((=~))
+import qualified Data.Sequence as Seq
 
 -- * 基本类型
 
@@ -80,7 +86,27 @@ data Token
   deriving (Show, Eq)
 
 -- | Tokens
-type Tokens = [Token]
+type Tokens = Seq.Seq Token
+
+-- | Empty Token
+emptyToken :: Tokens 
+emptyToken = Seq.empty
+
+-- | Single Token
+singleToken :: Token -> Tokens 
+singleToken = Seq.singleton
+
+-- | fromList
+tokensFromList :: [Token] -> Tokens 
+tokensFromList = Seq.fromList
+
+-- | drop
+dropToken :: Int -> Tokens -> Tokens 
+dropToken = Seq.drop
+
+-- | lookup
+lookupToken :: Int -> Tokens -> Maybe Token 
+lookupToken = Seq.lookup
 
 -- | Lexer error with context
 data LexerError = LexerError
@@ -198,11 +224,14 @@ isTBinary TDiv = True
 isTBinary TRem = True
 isTBinary _ = False
 
+-- | 优先级
 type Precedence = Int
 
+-- | 最低优先级
 minimumPrecedence :: Precedence
 minimumPrecedence = 0
 
+-- | Token的优先级
 precedence :: Token -> Precedence
 precedence TPlus = 45
 precedence TNeg = 45
@@ -211,9 +240,11 @@ precedence TDiv = 50
 precedence TRem = 50
 precedence _ = -1
 
+-- | Token是二元操作符
 mTIsBinary :: Maybe Token -> Bool
 mTIsBinary mToken = (isTBinary <$> mToken) == Just True
 
+-- | Token的优先级是否大于给定数
 mTPrecedenceGEt :: Precedence -> Maybe Token -> Bool
 mTPrecedenceGEt pre = maybe False (\x -> precedence x >= pre)
 
@@ -270,15 +301,15 @@ findLongestMatch input = findMaxLengthMatch $ mapMaybe findMatch tokenRegexes
     findMaxLengthMatch matches = listToMaybe $ sortOn (Ord.Down . lenToken . fst) matches
 
 -- | 词法分析器, 带有已处理的Token, 方便输出报错信息
-lexerWithState :: CodeString -> [Token] -> Either LexerError [Token]
+lexerWithState :: CodeString -> Tokens -> Either LexerError Tokens
 lexerWithState input = go (dropWhile isSpace input)
   where
     go "" accTokens = Right accTokens
     go remaining accTokens =
       case findLongestMatch remaining of
         Nothing -> Left $ LexerError "No match found" accTokens remaining
-        Just (token, rest) -> go (dropWhile isSpace rest) (accTokens ++ [token])
+        Just (token, rest) -> go (dropWhile isSpace rest) (accTokens <> singleToken token)
 
 -- | 词法分析器
-lexer :: CodeString -> Either LexerError [Token]
-lexer input = lexerWithState (dropWhile isSpace input) []
+lexer :: CodeString -> Either LexerError Tokens
+lexer input = lexerWithState (dropWhile isSpace input) emptyToken

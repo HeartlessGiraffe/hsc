@@ -37,7 +37,7 @@ import Utils (Pretty (..))
 -- * SC AST
 
 -- ** AST Definition
-
+-- 
 -- program = Program(function_definition)
 -- function_definition = Function(identifier name, statement body)
 -- statement = Return(exp)
@@ -46,6 +46,7 @@ import Utils (Pretty (..))
 --     | Binary(binary_operator, exp, exp)
 -- unary_operator = Complement | Negate
 -- binary_operator = Add | Subtract | Multiply | Divide | Remainder
+
 newtype Identifier = Identifier
   { unIdenityfier :: String
   }
@@ -131,17 +132,17 @@ instance Pretty BinaryOperator where
 -- <int> ::= ? A constant token ?
 
 data ExpectError = ExpectError
-  { expected :: [Token],
+  { expected :: Tokens,
     found :: Maybe Token
   }
   deriving (Show)
 
-throwExpectError :: [Token] -> Maybe Token -> Parser a
+throwExpectError :: Tokens -> Maybe Token -> Parser a
 throwExpectError expecting meet =
   throwError $ ExpectError expecting meet
 
-nothingExpected :: [Token]
-nothingExpected = []
+nothingExpected :: Tokens
+nothingExpected = emptyToken
 
 type Expect = Either ExpectError
 
@@ -154,20 +155,17 @@ expect expectedToken = do
     Just foundToken -> do
       if expectedToken == foundToken
         then takeToken
-        else throwExpectError [expectedToken] (Just foundToken)
-    Nothing -> throwExpectError [expectedToken] Nothing
+        else throwExpectError (singleToken expectedToken) (Just foundToken)
+    Nothing -> throwExpectError (singleToken expectedToken) Nothing
 
 peek :: Parser (Maybe Token)
 peek = do
-  tokens <- get
-  case tokens of
-    (foundToken : _) -> return (Just foundToken)
-    [] -> return Nothing
+  gets (lookupToken 0)
 
 takeToken :: Parser ()
 takeToken = do
   tokens <- get
-  put $ drop 1 tokens
+  put $ dropToken 1 tokens
 
 -- | Parse a program and return the AST
 evalParse :: Tokens -> Expect Program
@@ -249,7 +247,7 @@ parseFactor = do
       expect TRightParen
       return innerExp
     others ->
-      throwExpectError [TConstant 0, TBitwiseComple, TNeg, TLeftParen] others
+      throwExpectError (tokensFromList [TConstant 0, TBitwiseComple, TNeg, TLeftParen]) others
 
 -- | Parse a unaryOperator
 --
@@ -265,7 +263,7 @@ parseUnop = do
       takeToken
       return Negate
     others ->
-      throwExpectError [TBitwiseComple, TNeg] others
+      throwExpectError (tokensFromList [TBitwiseComple, TNeg]) others
 
 -- | Parse a bineryOperator
 --
@@ -290,7 +288,7 @@ parseBinop = do
       takeToken
       return Remainder
     others ->
-      throwExpectError [TNeg, TPlus, TMul, TDiv, TRem] others
+      throwExpectError (tokensFromList [TNeg, TPlus, TMul, TDiv, TRem]) others
 
 -- | Parse an identifier
 --
@@ -303,7 +301,7 @@ parseIdentifier = do
       takeToken
       return (Identifier i)
     others ->
-      throwExpectError [TIdentifier ""] others
+      throwExpectError (tokensFromList [TIdentifier ""]) others
 
 -- | Parse an integer
 --
@@ -316,4 +314,4 @@ parseInt = do
       takeToken
       return i
     others ->
-      throwExpectError [TConstant 0] others
+      throwExpectError (tokensFromList [TConstant 0]) others

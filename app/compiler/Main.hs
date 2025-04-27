@@ -18,7 +18,7 @@ main = do
       case lexer content of
         Right tokens -> case evalParse tokens of
           Right ast -> do
-            let assembly = constructAProgram ((convertProgramWithFixedInstructions (genTKProgram ast)))
+            let assembly = constructAProgram (convertProgramWithFixedInstructions (genTKProgram ast))
             let outputFilePath = replaceExtension filePath "s"
             writeFile outputFilePath assembly
             putStrLn $ "Assembly written to " ++ outputFilePath
