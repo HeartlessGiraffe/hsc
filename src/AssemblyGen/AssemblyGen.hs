@@ -21,19 +21,10 @@ module AssemblyGen.AssemblyGen
   )
 where
 
--- convertProgram,
--- convertFunction,
--- convertReturn,
--- convertConstant,
--- convertIdentifier,
-
 import Control.Monad.State
 import qualified Data.Map as M
 import qualified TACKY.TACKY as TACKY
-import qualified Text.PrettyPrint as PP
-import Utils (Pretty (..))
 import qualified Data.Sequence as Seq
-import Data.Foldable (Foldable(..))
 
 -- * Assembly represented By ADT
 
@@ -113,73 +104,6 @@ data CondCode = E | NE | G | GE | L | LE
 
 data Reg = AX | DX | R10 | R11
   deriving (Show, Eq)
-
--- **  Pretty Printing
-
-instance Pretty Program where
-  pretty (Program funcDef) =
-    PP.text "Program {" PP.$$ PP.nest 2 (pretty funcDef) PP.$$ PP.text "}"
-
-instance Pretty FuncDef where
-  pretty (Function name instructions) =
-    PP.text "Function {" PP.$$ PP.nest 2 (pretty name) PP.$$ PP.nest 2 (PP.vcat (toList (fmap pretty instructions))) PP.$$ PP.text "}"
-
-instance Pretty Identifier where
-  pretty (Identifier name) = PP.text name
-
-instance Pretty Instruction where
-  pretty (Mov src dst) =
-    PP.text "Mov" PP.<+> (pretty src <> PP.text ",") PP.<+> pretty dst
-  pretty (Unary operator oprand) =
-    PP.text "Unary" PP.<+> (pretty operator <> PP.text ",") PP.<+> pretty oprand
-  pretty (Binary operator oprand1 oprand2) =
-    PP.text "Binary" PP.<+> (pretty operator <> PP.text ",") PP.<+> (pretty oprand1 <> PP.text ",") PP.<+> pretty oprand2
-  pretty (Cmp oprand1 oprand2) =
-    PP.text "Cmp" PP.<+> (pretty oprand1 <> PP.text ",") PP.<+> pretty oprand2
-  pretty (Idiv operator) =
-    PP.text "Idiv" PP.<+> pretty operator
-  pretty Cdq =
-    PP.text "Cdq"
-  pretty (Jmp i) =
-    PP.text "Jmp" PP.<+> pretty i
-  pretty (JmpCC cc i) =
-    PP.text "JmpCC" PP.<+> (pretty cc <> PP.text ",") PP.<+> pretty i
-  pretty (SetCC cc oprand) =
-    PP.text "JmpCC" PP.<+> (pretty cc <> PP.text ",") PP.<+> pretty oprand
-  pretty (Label i) =
-    PP.text "Label" PP.<+> pretty i
-  pretty (AllocateStack i) =
-    PP.text "AllocateStack" PP.<+> PP.int i
-  pretty Ret = PP.text "Ret"
-
-instance Pretty Operand where
-  pretty (Imm i) = PP.text "Imm" PP.<+> PP.int i
-  pretty (Register reg) = PP.text "Register" PP.<+> pretty reg
-  pretty (Pseudo i) = PP.text "Pseudo" PP.<+> pretty i
-  pretty (Stack i) = PP.text "Stack" PP.<+> PP.int i
-
-instance Pretty UnaryOperator where
-  pretty Neg = PP.text "Neg"
-  pretty Not = PP.text "Not"
-
-instance Pretty BinaryOperator where
-  pretty Add = PP.text "Add"
-  pretty Sub = PP.text "Sub"
-  pretty Mult = PP.text "Mult"
-
-instance Pretty CondCode where
-  pretty E = PP.text "E"
-  pretty NE = PP.text "NE"
-  pretty G = PP.text "G"
-  pretty GE = PP.text "GE"
-  pretty L = PP.text "L"
-  pretty LE = PP.text "LE"
-
-instance Pretty Reg where
-  pretty AX = PP.text "AX"
-  pretty DX = PP.text "DX"
-  pretty R10 = PP.text "R10"
-  pretty R11 = PP.text "R11"
 
 -- * Converting
 

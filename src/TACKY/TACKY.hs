@@ -12,6 +12,7 @@ module TACKY.TACKY
     FuncDef (..),
     Instruction (..),
     Val (..),
+    isConstant,
     UnaryOperator (..),
     BinaryOperator (..),
     isRelationalOperator,
@@ -32,10 +33,8 @@ where
 
 import Control.Monad.State
 import qualified Parser.Parser as Parser
-import qualified Text.PrettyPrint as PP
-import Utils (Pretty (..))
 import qualified Data.Sequence as Seq
-import Data.Foldable (Foldable(..))
+
 
 -- * TACKY AST
 
@@ -145,62 +144,6 @@ isRelationalOperator LessOrEqual = True
 isRelationalOperator GreaterThan = True
 isRelationalOperator GreaterOrEqual = True
 isRelationalOperator _ = False
-
--- ** Pretty
-
-instance Pretty Identifier where
-  pretty (Identifier name) = PP.text name
-
-instance Pretty Program where
-  pretty (Program funcDef) =
-    PP.text "Program {" PP.$$ PP.nest 2 (pretty funcDef) PP.$$ PP.text "}"
-
-instance Pretty FuncDef where
-  pretty (Function name body) =
-    PP.text "Function (" <> pretty name <> PP.text ") {" PP.$$ PP.nest 2 (PP.sep $ toList (pretty <$> body)) PP.$$ PP.text "}"
-
-instance Pretty Instruction where
-  pretty (Return expr) =
-    PP.text "Return(" <> pretty expr <> PP.text ")"
-  pretty (Unary op src dst) =
-    PP.text "Unary(" <> pretty op <> PP.text ", " <> pretty src <> PP.text ", " <> pretty dst <> PP.text ")"
-  pretty (Binary op src1 src2 dst) =
-    if isConstant src1 && isConstant src2 && isConstant dst
-      then
-        PP.text "Binary(" <> pretty op <> PP.text ", " <> pretty src1 <> PP.text ", " <> pretty src2 <> PP.text ", " <> pretty dst <> PP.text ")"
-      else PP.text "Binary(" PP.$$ PP.nest 2 (pretty op) <> PP.text ", " PP.$$ PP.nest 2 (pretty src1) PP.$$ PP.nest 2 (pretty src2) <> PP.text ", " PP.$$ PP.nest 2 (pretty dst) PP.$$ PP.text ")"
-  pretty (Copy src dst) =
-    PP.text "Copy(" <> pretty src <> PP.text ", " <> pretty dst <> PP.text ")"
-  pretty (Jump target) =
-    PP.text "Jump(" <> pretty target <> PP.text ")"
-  pretty (JumpIfZero cond target) =
-    PP.text "JumpIfZero(" <> pretty cond <> PP.text ", " <> pretty target <> PP.text ")"
-  pretty (JumpIfNotZero cond target) =
-    PP.text "JumpIfNotZero(" <> pretty cond <> PP.text ", " <> pretty target <> PP.text ")"
-  pretty (Label label) =
-    PP.text "Label(" <> pretty label <> PP.text ")"
-
-instance Pretty Val where
-  pretty (Constant c) = PP.text "Constant " <> PP.text (show c)
-  pretty (Var i) = PP.text "Var " <> pretty i
-
-instance Pretty UnaryOperator where
-  pretty Complement = PP.text "Complement"
-  pretty Negate = PP.text "Negate"
-  pretty Not = PP.text "Not"
-
-instance Pretty BinaryOperator where
-  pretty Add = PP.text "Add"
-  pretty Subtract = PP.text "Subtract"
-  pretty Multiply = PP.text "Multiply"
-  pretty Divide = PP.text "Divide"
-  pretty Remainder = PP.text "Remainder"
-  pretty Equal = PP.text "Equal"
-  pretty NotEqual = PP.text "NotEqual"
-  pretty GreaterThan = PP.text "GreaterThan"
-  pretty GreaterOrEqual = PP.text "GreaterOrEqual"
-  pretty LessThan = PP.text "LessThan"
-  pretty LessOrEqual = PP.text "LessOrEqual"
 
 -- * TAKCY Generation
 

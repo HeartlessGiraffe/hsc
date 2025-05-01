@@ -8,6 +8,7 @@ module Parser.Parser
     FuncDef (..),
     Statement (..),
     Exp (..),
+    isConstant,
     UnaryOperator (..),
     BinaryOperator (..),
 
@@ -31,8 +32,6 @@ import Control.Monad.Except
 import Control.Monad.State
 import Data.Maybe (fromJust)
 import qualified Lexer.Lexer as Lexer
-import qualified Text.PrettyPrint as PP
-import Utils (Pretty (..))
 
 -- * SC AST
 
@@ -98,51 +97,6 @@ data BinaryOperator
 
 -- ** Pretty
 
-instance Pretty Identifier where
-  pretty (Identifier name) = PP.text name
-
-instance Pretty Program where
-  pretty (Program funcDef) =
-    PP.text "Program {" PP.$$ PP.nest 2 (pretty funcDef) PP.$$ PP.text "}"
-
-instance Pretty FuncDef where
-  pretty (Function name body) =
-    PP.text "Function (" <> pretty name <> PP.text ") {" PP.$$ PP.nest 2 (pretty body) PP.$$ PP.text "}"
-
-instance Pretty Statement where
-  pretty (Return expr) =
-    PP.text "Return (" <> pretty expr <> PP.text ")"
-
-instance Pretty Exp where
-  pretty (Constant value) =
-    PP.text "Constant(" <> PP.int value <> PP.text ")"
-  pretty (Unary uOp e) =
-    PP.text "Unary(" <> pretty uOp <> PP.text ", " <> pretty e <> PP.text ")"
-  pretty (Binary bOp e1 e2) =
-    if isConstant e1 && isConstant e2
-      then
-        PP.text "Binary(" <> pretty bOp <> PP.text ", " <> pretty e1 <> PP.text ", " <> pretty e2 <> PP.text ")"
-      else PP.text "Binary(" PP.$$ PP.nest 2 (pretty bOp) <> PP.text ", " PP.$$ PP.nest 2 (pretty e1) <> PP.text ", " PP.$$ PP.nest 2 (pretty e2) PP.$$ PP.text ")"
-
-instance Pretty UnaryOperator where
-  pretty Complement = PP.text "Complement"
-  pretty Negate = PP.text "Negate"
-  pretty Not = PP.text "Not"
-
-instance Pretty BinaryOperator where
-  pretty Add = PP.text "Add"
-  pretty Subtract = PP.text "Subtract"
-  pretty Multiply = PP.text "Multiply"
-  pretty Divide = PP.text "Divide"
-  pretty Remainder = PP.text "Remainder"
-  pretty And = PP.text "And"
-  pretty Or = PP.text "Or"
-  pretty Equal = PP.text "Equal"
-  pretty NotEqual = PP.text "NotEqual"
-  pretty LessThan = PP.text "LessThan"
-  pretty GreaterThan = PP.text "GreaterThan"
-  pretty LessOrEqual = PP.text "LessOrEqual"
-  pretty GreaterOrEqual = PP.text "GreaterOrEqual"
 
 -- * Parsers
 

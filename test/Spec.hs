@@ -1,7 +1,7 @@
 import Control.Monad.State (evalStateT)
 import Lexer.Lexer
 import Parser.Parser
-import Utils (prettyPrint)
+import Utils.Pretty (prettyPrint)
 
 evalParseExp :: Precedence -> CodeString -> Exp
 evalParseExp p code = case lexer code of

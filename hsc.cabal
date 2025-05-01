@@ -30,7 +30,7 @@ library
       Lexer.Lexer
       Parser.Parser
       TACKY.TACKY
-      Utils
+      Utils.Pretty
   other-modules:
       Paths_hsc
   autogen-modules:

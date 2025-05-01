@@ -5,7 +5,7 @@ import Lexer.Lexer (lexer)
 import Parser.Parser (evalParse)
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
-import Utils (prettyPrint)
+import Utils.Pretty (prettyPrint)
 import TACKY.TACKY (genProgram)
 
 main :: IO ()
