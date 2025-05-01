@@ -37,15 +37,18 @@ import Utils (Pretty (..))
 -- * SC AST
 
 -- ** AST Definition
--- 
+
+--
 -- program = Program(function_definition)
 -- function_definition = Function(identifier name, statement body)
 -- statement = Return(exp)
 -- exp = Constant(int)
 --     | Unary(unary_operator, exp)
 --     | Binary(binary_operator, exp, exp)
--- unary_operator = Complement | Negate
--- binary_operator = Add | Subtract | Multiply | Divide | Remainder
+-- unary_operator = Complement | Negate | Not
+-- binary_operator = Add | Subtract | Multiply | Divide | Remainder | And | Or
+--                 | Equal | NotEqual | LessThan | LessOrEqual
+--                 | GreaterThan | GreaterOrEqual
 
 newtype Identifier = Identifier
   { unIdenityfier :: String
@@ -74,10 +77,23 @@ isConstant :: Exp -> Bool
 isConstant (Constant _) = True
 isConstant _ = False
 
-data UnaryOperator = Complement | Negate
+data UnaryOperator = Complement | Negate | Not
   deriving (Show, Eq)
 
-data BinaryOperator = Add | Subtract | Multiply | Divide | Remainder
+data BinaryOperator
+  = Add
+  | Subtract
+  | Multiply
+  | Divide
+  | Remainder
+  | And
+  | Or
+  | Equal
+  | NotEqual
+  | LessThan
+  | LessOrEqual
+  | GreaterThan
+  | GreaterOrEqual
   deriving (Show, Eq)
 
 -- ** Pretty
@@ -111,6 +127,7 @@ instance Pretty Exp where
 instance Pretty UnaryOperator where
   pretty Complement = PP.text "Complement"
   pretty Negate = PP.text "Negate"
+  pretty Not = PP.text "Not"
 
 instance Pretty BinaryOperator where
   pretty Add = PP.text "Add"
@@ -118,6 +135,14 @@ instance Pretty BinaryOperator where
   pretty Multiply = PP.text "Multiply"
   pretty Divide = PP.text "Divide"
   pretty Remainder = PP.text "Remainder"
+  pretty And = PP.text "And"
+  pretty Or = PP.text "Or"
+  pretty Equal = PP.text "Equal"
+  pretty NotEqual = PP.text "NotEqual"
+  pretty LessThan = PP.text "LessThan"
+  pretty GreaterThan = PP.text "GreaterThan"
+  pretty LessOrEqual = PP.text "LessOrEqual"
+  pretty GreaterOrEqual = PP.text "GreaterOrEqual"
 
 -- * Parsers
 
@@ -126,8 +151,9 @@ instance Pretty BinaryOperator where
 -- <statement> ::= "return" <exp> ";"
 -- <exp> ::= <factor> | <exp> <binop> <exp>
 -- <factor> ::= <int> | <unop> <factor> | "(" <exp> ")"
--- <unop> ::= "-" | "~"
--- <binop> ::= "-" | "+" | "*" | "/" | "%"
+-- <unop> ::= "-" | "~" | "!"
+-- <binop> ::= "-" | "+" | "*" | "/" | "%" | "&&" | "||"
+--         | "==" | "!=" | "<" | "<=" | ">" | ">="
 -- <identifier> ::= ? An identifier token ?
 -- <int> ::= ? A constant token ?
 
@@ -241,17 +267,20 @@ parseFactor = do
     Just TNeg -> do
       operator <- parseUnop
       Unary operator <$> parseFactor
+    Just TNot -> do
+      operator <- parseUnop
+      Unary operator <$> parseFactor
     Just TLeftParen -> do
       takeToken
       innerExp <- parseExp minimumPrecedence
       expect TRightParen
       return innerExp
     others ->
-      throwExpectError (tokensFromList [TConstant 0, TBitwiseComple, TNeg, TLeftParen]) others
+      throwExpectError (tokensFromList [TConstant 0, TBitwiseComple, TNeg, TNot, TLeftParen]) others
 
 -- | Parse a unaryOperator
 --
--- <unop> ::= "-" | "~"
+-- <unop> ::= "-" | "~" | "!"
 parseUnop :: Parser UnaryOperator
 parseUnop = do
   nextToken <- peek
@@ -262,12 +291,16 @@ parseUnop = do
     Just TNeg -> do
       takeToken
       return Negate
+    Just TNot -> do
+      takeToken
+      return Not
     others ->
-      throwExpectError (tokensFromList [TBitwiseComple, TNeg]) others
+      throwExpectError (tokensFromList [TBitwiseComple, TNeg, TNot]) others
 
 -- | Parse a bineryOperator
 --
--- <binop> ::= "-" | "+" | "*" | "/" | "%"
+-- <binop> ::= "-" | "+" | "*" | "/" | "%" | "&&" | "||"
+--         | "==" | "!=" | "<" | "<=" | ">" | ">="
 parseBinop :: Parser BinaryOperator
 parseBinop = do
   nextToken <- peek
@@ -287,8 +320,32 @@ parseBinop = do
     Just TRem -> do
       takeToken
       return Remainder
+    Just TAnd -> do
+      takeToken
+      return And
+    Just TOr -> do
+      takeToken
+      return Or
+    Just TEQ -> do
+      takeToken
+      return Equal
+    Just TNE -> do
+      takeToken
+      return NotEqual
+    Just TLT -> do
+      takeToken
+      return LessThan
+    Just TGT -> do
+      takeToken
+      return GreaterThan
+    Just TLE -> do
+      takeToken
+      return LessOrEqual
+    Just TGE -> do
+      takeToken
+      return GreaterOrEqual
     others ->
-      throwExpectError (tokensFromList [TNeg, TPlus, TMul, TDiv, TRem]) others
+      throwExpectError (tokensFromList [TNeg, TPlus, TMul, TDiv, TRem, TAnd, TOr, TEQ, TNE, TLT, TGT, TLE, TGE]) others
 
 -- | Parse an identifier
 --

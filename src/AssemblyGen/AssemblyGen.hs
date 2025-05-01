@@ -10,6 +10,7 @@ module AssemblyGen.AssemblyGen
     AUnaryOperator (..),
     ABinaryOperator (..),
     AOperand (..),
+    ACondCode(..),
     AReg (..),
 
     -- * Converting
@@ -40,13 +41,19 @@ import Utils (Pretty (..))
 -- instruction = Mov(operand src, operand dst)
 --             | Unary(unary_operator, operand)
 --             | Binary(binary_operator, operand, operand)
+--             | Cmp(operand, operand)
 --             | Idiv(operand)
 --             | Cdq
+--             | Jmp(identifier)
+--             | JmpCC(cond_code, identifier)
+--             | SetCC(cond_code, operand)
+--             | Label(identifier)
 --             | AllocateStack(int)
 --             | Ret
 -- unary_operator = Neg | Not
 -- binary_operator = Add | Sub | Mult
 -- operand = Imm(int) | Reg(reg) | Pseudo(identifier) | Stack(int)
+-- cond_code = E | NE | G | GE | L | LE
 -- reg = AX | DX | R10 | R11
 
 data AProgram = AProgram AFuncDef
@@ -70,8 +77,13 @@ data AInstruction
       }
   | AUnary AUnaryOperator AOperand
   | ABinary ABinaryOperator AOperand AOperand
+  | ACmp AOperand AOperand
   | AIdiv AOperand
   | ACdq
+  | AJmp AIdentifier
+  | AJmpCC ACondCode AIdentifier
+  | ASetCC ACondCode AOperand
+  | ALabel AIdentifier
   | AAllocateStack Int
   | ARet
   deriving (Show, Eq)
@@ -83,6 +95,9 @@ data ABinaryOperator = AAdd | ASub | AMult
   deriving (Show, Eq)
 
 data AOperand = AImm Int | ARegister AReg | APseudo AIdentifier | AStack Int
+  deriving (Show, Eq)
+
+data ACondCode = E | NE | G | GE | L | LE
   deriving (Show, Eq)
 
 data AReg = AX | DX | R10 | R11
@@ -108,10 +123,20 @@ instance Pretty AInstruction where
     PP.text "AUnary" PP.<+> (pretty operator <> PP.text ",") PP.<+> pretty oprand
   pretty (ABinary operator oprand1 oprand2) =
     PP.text "ABinary" PP.<+> (pretty operator <> PP.text ",") PP.<+> (pretty oprand1 <> PP.text ",") PP.<+> pretty oprand2
+  pretty (ACmp oprand1 oprand2) =
+    PP.text "ACmp" PP.<+> (pretty oprand1 <> PP.text ",") PP.<+> pretty oprand2
   pretty (AIdiv operator) =
     PP.text "AIdiv" PP.<+> pretty operator
   pretty ACdq =
     PP.text "ACdq"
+  pretty (AJmp i) =
+    PP.text "AJmp" PP.<+> pretty i
+  pretty (AJmpCC cc i) =
+    PP.text "AJmpCC" PP.<+> (pretty cc <> PP.text ",") PP.<+> pretty i
+  pretty (ASetCC cc oprand) =
+    PP.text "AJmpCC" PP.<+> (pretty cc <> PP.text ",") PP.<+> pretty oprand
+  pretty (ALabel i) =
+    PP.text "ALabel" PP.<+> pretty i
   pretty (AAllocateStack i) =
     PP.text "AAllocateStack" PP.<+> PP.int i
   pretty ARet = PP.text "ARet"
@@ -130,6 +155,14 @@ instance Pretty ABinaryOperator where
   pretty AAdd = PP.text "AAdd"
   pretty ASub = PP.text "ASub"
   pretty AMult = PP.text "AMult"
+
+instance Pretty ACondCode where
+  pretty E = PP.text "E"
+  pretty NE = PP.text "NE"
+  pretty G = PP.text "G"
+  pretty GE = PP.text "GE"
+  pretty L = PP.text "L"
+  pretty LE = PP.text "LE"
 
 instance Pretty AReg where
   pretty AX = PP.text "AX"
@@ -175,6 +208,11 @@ convertInstruction (TKReturn val) =
   [ AMov (convertVal val) (ARegister AX),
     ARet
   ]
+convertInstruction (TKUnary TKNot src dst) =
+  [ ACmp (AImm 0) (convertVal src),
+    AMov (AImm 0) (convertVal dst),
+    ASetCC E (convertVal dst)
+  ]
 convertInstruction (TKUnary uOperator src dst) =
   [ AMov (convertVal src) (convertVal dst),
     AUnary (convertUnaryOperator uOperator) (convertVal dst)
@@ -192,8 +230,32 @@ convertInstruction (TKBinary TKRemainder src1 src2 dst) =
     AMov (ARegister DX) (convertVal dst)
   ]
 convertInstruction (TKBinary bOperator src1 src2 dst) =
-  [ AMov (convertVal src1) (convertVal dst),
-    ABinary (convertBinaryOperator bOperator) (convertVal src2) (convertVal dst)
+  if isRelationalOperator bOperator
+    then
+      [ ACmp (convertVal src2) (convertVal src1),
+        AMov (AImm 0) (convertVal dst),
+        ASetCC (convertComparison bOperator) (convertVal dst)
+      ]
+    else
+      [ AMov (convertVal src1) (convertVal dst),
+        ABinary (convertBinaryOperator bOperator) (convertVal src2) (convertVal dst)
+      ]
+convertInstruction (TKJumpIfZero val target) =
+  [ ACmp (AImm 0) (convertVal val),
+    AJmpCC E (convertIdentifier target)
+  ]
+convertInstruction (TKJumpIfNotZero val target) =
+  [ ACmp (AImm 0) (convertVal val),
+    AJmpCC NE (convertIdentifier target)
+  ]
+convertInstruction (TKJump target) =
+  [ AJmp (convertIdentifier target)
+  ]
+convertInstruction (TKLabel name) =
+  [ ALabel (convertIdentifier name)
+  ]
+convertInstruction (TKCopy src dst) =
+  [ AMov (convertVal src) (convertVal dst)
   ]
 
 convertIdentifier :: TKIdentifier -> AIdentifier
@@ -202,6 +264,16 @@ convertIdentifier (TKIdentifier name) = AIdentifier name
 convertUnaryOperator :: TKUnaryOperator -> AUnaryOperator
 convertUnaryOperator TKComplement = ANot
 convertUnaryOperator TKNegate = ANeg
+convertUnaryOperator TKNot = ANot
+
+convertComparison :: TKBinaryOperator -> ACondCode
+convertComparison TKEqual = E
+convertComparison TKNotEqual = NE
+convertComparison TKLessThan = L
+convertComparison TKLessOrEqual = LE
+convertComparison TKGreaterThan = G
+convertComparison TKGreaterOrEqual = GE
+convertComparison op = error $ "convertComparison: " ++ show op ++ " shouldn't be convert!"
 
 convertBinaryOperator :: TKBinaryOperator -> ABinaryOperator
 convertBinaryOperator TKAdd = AAdd
@@ -262,6 +334,13 @@ replaceAPseudoReg instruction =
     AIdiv operand -> do
       operand' <- allocatePseudoReg operand
       return $ AIdiv operand'
+    ACmp operand1 operand2 -> do 
+      operand1' <- allocatePseudoReg operand1
+      operand2' <- allocatePseudoReg operand2
+      return $ ACmp operand1' operand2'
+    ASetCC opecode operand -> do 
+      operand' <- allocatePseudoReg operand
+      return $ ASetCC opecode operand'
     others -> return others
 
 replacePseudoRegs :: (Traversable t) => t AInstruction -> (Offset, t AInstruction)
@@ -312,6 +391,14 @@ fixIns (ABinary AMult src (AStack dst)) =
   [ AMov (AStack dst) (ARegister R11),
     ABinary AMult src (ARegister R11),
     AMov (ARegister R11) (AStack dst)
+  ]
+fixIns (ACmp (AStack src) (AStack dst)) = 
+  [ AMov (AStack src) (ARegister R10),
+    ACmp (ARegister R10) (AStack dst)
+  ]
+fixIns (ACmp src (AImm i)) = 
+  [ AMov (AImm i) (ARegister R11),
+    ACmp src (ARegister R11)
   ]
 fixIns other = [other]
 

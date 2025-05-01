@@ -30,9 +30,9 @@ import Data.Char (isSpace)
 import Data.List (sortOn)
 import Data.Maybe (fromJust, listToMaybe, mapMaybe)
 import qualified Data.Ord as Ord
+import qualified Data.Sequence as Seq
 import Text.Read (readMaybe)
 import Text.Regex.PCRE ((=~))
-import qualified Data.Sequence as Seq
 
 -- * 基本类型
 
@@ -83,29 +83,47 @@ data Token
     TDiv
   | -- | 求余
     TRem
+  | -- | 逻辑非
+    TNot
+  | -- | 逻辑与
+    TAnd
+  | -- | 逻辑或
+    TOr
+  | -- | 等于
+    TEQ
+  | -- | 不等于
+    TNE
+  | -- | 小于
+    TLT
+  | -- | 大于
+    TGT
+  | -- | 小于等于
+    TLE
+  | -- | 大于等于
+    TGE
   deriving (Show, Eq)
 
 -- | Tokens
 type Tokens = Seq.Seq Token
 
 -- | Empty Token
-emptyToken :: Tokens 
+emptyToken :: Tokens
 emptyToken = Seq.empty
 
 -- | Single Token
-singleToken :: Token -> Tokens 
+singleToken :: Token -> Tokens
 singleToken = Seq.singleton
 
 -- | fromList
-tokensFromList :: [Token] -> Tokens 
+tokensFromList :: [Token] -> Tokens
 tokensFromList = Seq.fromList
 
 -- | drop
-dropToken :: Int -> Tokens -> Tokens 
+dropToken :: Int -> Tokens -> Tokens
 dropToken = Seq.drop
 
 -- | lookup
-lookupToken :: Int -> Tokens -> Maybe Token 
+lookupToken :: Int -> Tokens -> Maybe Token
 lookupToken = Seq.lookup
 
 -- | Lexer error with context
@@ -191,6 +209,42 @@ decreRegex = "--"
 startRegex :: TokenRegex
 startRegex = "\\A"
 
+-- | 逻辑非
+notRegex :: TokenRegex
+notRegex = "!"
+
+-- | 逻辑与
+andRegex :: TokenRegex
+andRegex = "&&"
+
+-- | 逻辑或
+orRegex :: TokenRegex
+orRegex = "\\|\\|"
+
+-- | 等于
+eqRegex :: TokenRegex
+eqRegex = "=="
+
+-- | 不等于
+neqRegex :: TokenRegex
+neqRegex = "!="
+
+-- | 小于
+ltRegex :: TokenRegex
+ltRegex = "<"
+
+-- | 大于
+gtRegex :: TokenRegex
+gtRegex = ">"
+
+-- | 小于等于
+leRegex :: TokenRegex
+leRegex = "<="
+
+-- | 大于等于
+geRegex :: TokenRegex
+geRegex = ">="
+
 -- | token的正则表达式
 tokenRegexes :: [(TokenRegex, Token)]
 tokenRegexes =
@@ -212,7 +266,16 @@ tokenRegexes =
           (plusRegex, TPlus),
           (mulRegex, TMul),
           (divRegex, TDiv),
-          (remRegex, TRem)
+          (remRegex, TRem),
+          (notRegex, TNot),
+          (andRegex, TAnd),
+          (orRegex, TOr),
+          (eqRegex, TEQ),
+          (neqRegex, TNE),
+          (ltRegex, TLT),
+          (gtRegex, TGT),
+          (leRegex, TLE),
+          (geRegex, TGE)
         ]
 
 -- | Token是二元表达式
@@ -222,6 +285,15 @@ isTBinary TPlus = True
 isTBinary TMul = True
 isTBinary TDiv = True
 isTBinary TRem = True
+isTBinary TNot = True 
+isTBinary TAnd = True 
+isTBinary TOr = True 
+isTBinary TEQ = True 
+isTBinary TNE = True 
+isTBinary TLT = True 
+isTBinary TGT = True 
+isTBinary TLE = True 
+isTBinary TGE = True 
 isTBinary _ = False
 
 -- | 优先级
@@ -238,6 +310,14 @@ precedence TNeg = 45
 precedence TMul = 50
 precedence TDiv = 50
 precedence TRem = 50
+precedence TLT = 35
+precedence TLE = 35
+precedence TGT = 35
+precedence TGE = 35
+precedence TEQ = 30
+precedence TNE = 30
+precedence TAnd = 10
+precedence TOr = 5
 precedence _ = -1
 
 -- | Token是二元操作符
@@ -273,6 +353,15 @@ lenToken TPlus = 1
 lenToken TMul = 1
 lenToken TDiv = 1
 lenToken TRem = 1
+lenToken TNot = 1
+lenToken TAnd = 2
+lenToken TOr = 2
+lenToken TEQ = 2
+lenToken TNE = 2
+lenToken TGT = 1
+lenToken TLT = 1
+lenToken TGE = 2
+lenToken TLE = 2
 
 -- | 如果标识符是关键字, 则将其视为关键字
 identifierToKeyword :: Token -> Token
