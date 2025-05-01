@@ -1,9 +1,9 @@
 module Emission.Emission
-  ( constructAProgram,
+  ( constructProgram,
   )
 where
 
-import AssemblyGen.AssemblyGen
+import qualified AssemblyGen.AssemblyGen as AG
 
 -- | linux stack line
 linuxStackLine :: String
@@ -13,92 +13,92 @@ linuxStackLine = indent ++ ".section .note.GNU-stack,\"\",@progbits\n"
 indent :: String
 indent = "    "
 
-constructAProgram :: AProgram -> String
-constructAProgram (AProgram funcDef) =
-  constructAFunction funcDef
+constructProgram :: AG.Program -> String
+constructProgram (AG.Program funcDef) =
+  constructFunction funcDef
     ++ linuxStackLine
 
-constructAFunction :: AFuncDef -> String
-constructAFunction (AFunction name instuctions) =
+constructFunction :: AG.FuncDef -> String
+constructFunction (AG.Function name instuctions) =
   indent
     ++ ".global "
-    ++ unAIdentifier name
+    ++ AG.unIdentifier name
     ++ "\n"
-    ++ unAIdentifier name
+    ++ AG.unIdentifier name
     ++ ":\n"
     ++ indent
     ++ "pushq %rbp\n"
     ++ indent
     ++ "movq %rsp, %rbp\n"
-    ++ constructAInstructions instuctions
+    ++ constructInstructions instuctions
 
-constructAInstructions :: [AInstruction] -> String
-constructAInstructions is =
+constructInstructions :: [AG.Instruction] -> String
+constructInstructions is =
   concat a
   where
-    a = (\x -> indent ++ constructAInstruction x) <$> is
+    a = (\x -> indent ++ constructInstruction x) <$> is
 
-constructAInstruction :: AInstruction -> String
-constructAInstruction (AMov src dst) =
-  "movl" ++ " " ++ constructAOperand src ++ ", " ++ constructAOperand dst ++ "\n"
-constructAInstruction ARet =
+constructInstruction :: AG.Instruction -> String
+constructInstruction (AG.Mov src dst) =
+  "movl" ++ " " ++ constructOperand src ++ ", " ++ constructOperand dst ++ "\n"
+constructInstruction AG.Ret =
   "movq %rbp, %rsp\n"
     ++ indent
     ++ "popq %rbp\n"
     ++ indent
     ++ "ret\n"
-constructAInstruction (AUnary operator operand) =
-  constructUnaryOperator operator ++ " " ++ constructAOperand operand ++ "\n"
-constructAInstruction (ABinary operator src dst) =
-  constructBinaryOperator operator ++ " " ++ constructAOperand src ++ ", " ++ constructAOperand dst ++ "\n"
-constructAInstruction (AIdiv operand) =
-  "idivl " ++ constructAOperand operand ++ "\n"
-constructAInstruction ACdq =
+constructInstruction (AG.Unary operator operand) =
+  constructUnaryOperator operator ++ " " ++ constructOperand operand ++ "\n"
+constructInstruction (AG.Binary operator src dst) =
+  constructBinaryOperator operator ++ " " ++ constructOperand src ++ ", " ++ constructOperand dst ++ "\n"
+constructInstruction (AG.Idiv operand) =
+  "idivl " ++ constructOperand operand ++ "\n"
+constructInstruction AG.Cdq =
   "cdq\n"
-constructAInstruction (AAllocateStack i) =
+constructInstruction (AG.AllocateStack i) =
   "subq $" ++ show i ++ ", %rsp\n"
-constructAInstruction (ACmp operand1 operand2) = 
-  "cmpl " ++ constructAOperand operand1 ++ ", " ++ constructAOperand operand2 ++ "\n"
-constructAInstruction (AJmp label) = 
-  "jmp " ++ ".L" ++ unAIdentifier label ++ "\n"
-constructAInstruction (AJmpCC condCode label) = 
-  "j" ++ constructCondCode condCode ++ " " ++ ".L" ++ unAIdentifier label ++ "\n"
-constructAInstruction (ASetCC condCode operand) = 
+constructInstruction (AG.Cmp operand1 operand2) =
+  "cmpl " ++ constructOperand operand1 ++ ", " ++ constructOperand operand2 ++ "\n"
+constructInstruction (AG.Jmp label) =
+  "jmp " ++ ".L" ++ AG.unIdentifier label ++ "\n"
+constructInstruction (AG.JmpCC condCode label) =
+  "j" ++ constructCondCode condCode ++ " " ++ ".L" ++ AG.unIdentifier label ++ "\n"
+constructInstruction (AG.SetCC condCode operand) =
   "set" ++ constructCondCode condCode ++ " " ++ construct1BRegister operand ++ "\n"
-constructAInstruction (ALabel label) = 
-  ".L" ++ unAIdentifier label ++ ":\n"
+constructInstruction (AG.Label label) =
+  ".L" ++ AG.unIdentifier label ++ ":\n"
 
-constructAOperand :: AOperand -> String
-constructAOperand (AImm imm) = "$" <> show imm
-constructAOperand (ARegister AX) = "%eax"
-constructAOperand (ARegister DX) = "%edx"
-constructAOperand (ARegister R10) = "%r10d"
-constructAOperand (ARegister R11) = "%r11d"
-constructAOperand (AStack i) = show i <> "(%rbp)"
-constructAOperand (APseudo _) = error "unexpected operand during emission: APseudo"
+constructOperand :: AG.Operand -> String
+constructOperand (AG.Imm imm) = "$" <> show imm
+constructOperand (AG.Register AG.AX) = "%eax"
+constructOperand (AG.Register AG.DX) = "%edx"
+constructOperand (AG.Register AG.R10) = "%r10d"
+constructOperand (AG.Register AG.R11) = "%r11d"
+constructOperand (AG.Stack i) = show i <> "(%rbp)"
+constructOperand (AG.Pseudo _) = error "unexpected operand during emission: Pseudo"
 
-construct1BRegister :: AOperand -> String 
-construct1BRegister (AImm imm) = "$" <> show imm
-construct1BRegister (ARegister AX) = "%al"
-construct1BRegister (ARegister DX) = "%dl"
-construct1BRegister (ARegister R10) = "%r10b"
-construct1BRegister (ARegister R11) = "%r11b"
-construct1BRegister (AStack i) = show i <> "(%rbp)"
-construct1BRegister (APseudo _) = error "unexpected operand during emission: APseudo"
+construct1BRegister :: AG.Operand -> String
+construct1BRegister (AG.Imm imm) = "$" <> show imm
+construct1BRegister (AG.Register AG.AX) = "%al"
+construct1BRegister (AG.Register AG.DX) = "%dl"
+construct1BRegister (AG.Register AG.R10) = "%r10b"
+construct1BRegister (AG.Register AG.R11) = "%r11b"
+construct1BRegister (AG.Stack i) = show i <> "(%rbp)"
+construct1BRegister (AG.Pseudo _) = error "unexpected operand during emission: Pseudo"
 
-constructUnaryOperator :: AUnaryOperator -> String
-constructUnaryOperator ANeg = "negl"
-constructUnaryOperator ANot = "notl"
+constructUnaryOperator :: AG.UnaryOperator -> String
+constructUnaryOperator AG.Neg = "negl"
+constructUnaryOperator AG.Not = "notl"
 
-constructBinaryOperator :: ABinaryOperator -> String
-constructBinaryOperator AAdd = "addl"
-constructBinaryOperator ASub = "subl"
-constructBinaryOperator AMult = "imull"
+constructBinaryOperator :: AG.BinaryOperator -> String
+constructBinaryOperator AG.Add = "addl"
+constructBinaryOperator AG.Sub = "subl"
+constructBinaryOperator AG.Mult = "imull"
 
-constructCondCode :: ACondCode -> String 
-constructCondCode E = "e"
-constructCondCode NE = "ne"
-constructCondCode L = "l"
-constructCondCode LE = "le"
-constructCondCode G = "g"
-constructCondCode GE = "ge"
+constructCondCode :: AG.CondCode -> String
+constructCondCode AG.E = "e"
+constructCondCode AG.NE = "ne"
+constructCondCode AG.L = "l"
+constructCondCode AG.LE = "le"
+constructCondCode AG.G = "g"
+constructCondCode AG.GE = "ge"

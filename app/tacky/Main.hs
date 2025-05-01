@@ -2,7 +2,7 @@ module Main (main) where
 
 import Lexer.Lexer (lexer)
 import Parser.Parser (evalParse)
-import TACKY.TACKY (genTKProgram)
+import TACKY.TACKY (genProgram)
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
 import Utils (prettyPrint)
@@ -15,7 +15,7 @@ main = do
       content <- readFile filePath
       case lexer content of
         Right tokens -> case evalParse tokens of
-          Right ast -> putStrLn $ prettyPrint (genTKProgram ast)
+          Right ast -> putStrLn $ prettyPrint (genProgram ast)
           Left err -> do
             print err
             exitFailure

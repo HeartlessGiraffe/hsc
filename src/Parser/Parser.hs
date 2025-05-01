@@ -30,7 +30,7 @@ where
 import Control.Monad.Except
 import Control.Monad.State
 import Data.Maybe (fromJust)
-import Lexer.Lexer
+import qualified Lexer.Lexer as Lexer
 import qualified Text.PrettyPrint as PP
 import Utils (Pretty (..))
 
@@ -158,43 +158,43 @@ instance Pretty BinaryOperator where
 -- <int> ::= ? A constant token ?
 
 data ExpectError = ExpectError
-  { expected :: Tokens,
-    found :: Maybe Token
+  { expected :: Lexer.Tokens,
+    found :: Maybe Lexer.Token
   }
   deriving (Show)
 
-throwExpectError :: Tokens -> Maybe Token -> Parser a
+throwExpectError :: Lexer.Tokens -> Maybe Lexer.Token -> Parser a
 throwExpectError expecting meet =
   throwError $ ExpectError expecting meet
 
-nothingExpected :: Tokens
-nothingExpected = emptyToken
+nothingExpected :: Lexer.Tokens
+nothingExpected = Lexer.emptyToken
 
 type Expect = Either ExpectError
 
-type Parser a = StateT Tokens Expect a
+type Parser a = StateT Lexer.Tokens Expect a
 
-expect :: Token -> Parser ()
+expect :: Lexer.Token -> Parser ()
 expect expectedToken = do
   nextToken <- peek
   case nextToken of
     Just foundToken -> do
       if expectedToken == foundToken
         then takeToken
-        else throwExpectError (singleToken expectedToken) (Just foundToken)
-    Nothing -> throwExpectError (singleToken expectedToken) Nothing
+        else throwExpectError (Lexer.singleToken expectedToken) (Just foundToken)
+    Nothing -> throwExpectError (Lexer.singleToken expectedToken) Nothing
 
-peek :: Parser (Maybe Token)
+peek :: Parser (Maybe Lexer.Token)
 peek = do
-  gets (lookupToken 0)
+  gets (Lexer.lookupToken 0)
 
 takeToken :: Parser ()
 takeToken = do
   tokens <- get
-  put $ dropToken 1 tokens
+  put $ Lexer.dropToken 1 tokens
 
 -- | Parse a program and return the AST
-evalParse :: Tokens -> Expect Program
+evalParse :: Lexer.Tokens -> Expect Program
 evalParse = evalStateT parseProgram
 
 -- | Parse a program
@@ -213,14 +213,14 @@ parseProgram = do
 -- <function> ::= "int" <identifier> "(" "void" ")" "{" <statement> "}"
 parseFuncDef :: Parser FuncDef
 parseFuncDef = do
-  expect TIntKeyword
+  expect Lexer.IntKeyword
   functionName <- parseIdentifier
-  expect TLeftParen
-  expect TVoidKeyword
-  expect TRightParen
-  expect TLeftBrace
+  expect Lexer.LeftParen
+  expect Lexer.VoidKeyword
+  expect Lexer.RightParen
+  expect Lexer.LeftBrace
   body <- parseStatement
-  expect TRightBrace
+  expect Lexer.RightBrace
   return (Function functionName body)
 
 -- | Parse a statement
@@ -228,21 +228,21 @@ parseFuncDef = do
 -- <statement> ::= "return" <exp> ";"
 parseStatement :: Parser Statement
 parseStatement = do
-  expect TReturnKeyword
-  returnVal <- parseExp minimumPrecedence
-  expect TSemicolon
+  expect Lexer.ReturnKeyword
+  returnVal <- parseExp Lexer.minimumPrecedence
+  expect Lexer.Semicolon
   return (Return returnVal)
 
 -- | Parse a expression
 --
 -- <exp> ::= <factor> | <exp> <binop> <exp>
-parseExp :: Precedence -> Parser Exp
+parseExp :: Lexer.Precedence -> Parser Exp
 parseExp p =
   let loop _left _nextToken =
-        if mTIsBinary _nextToken && mTPrecedenceGEt p _nextToken
+        if Lexer.mTIsBinary _nextToken && Lexer.mTPrecedenceGEt p _nextToken
           then do
             operator <- parseBinop
-            right <- parseExp (precedence (fromJust _nextToken) + 1)
+            right <- parseExp (Lexer.precedence (fromJust _nextToken) + 1)
             let nleft = Binary operator _left right
             nextT <- peek
             loop nleft nextT
@@ -260,23 +260,23 @@ parseFactor :: Parser Exp
 parseFactor = do
   nextToken <- peek
   case nextToken of
-    Just (TConstant _) -> Constant <$> parseInt
-    Just TBitwiseComple -> do
+    Just (Lexer.Constant _) -> Constant <$> parseInt
+    Just Lexer.BitwiseComple -> do
       operator <- parseUnop
       Unary operator <$> parseFactor
-    Just TNeg -> do
+    Just Lexer.Neg -> do
       operator <- parseUnop
       Unary operator <$> parseFactor
-    Just TNot -> do
+    Just Lexer.Not -> do
       operator <- parseUnop
       Unary operator <$> parseFactor
-    Just TLeftParen -> do
+    Just Lexer.LeftParen -> do
       takeToken
-      innerExp <- parseExp minimumPrecedence
-      expect TRightParen
+      innerExp <- parseExp Lexer.minimumPrecedence
+      expect Lexer.RightParen
       return innerExp
     others ->
-      throwExpectError (tokensFromList [TConstant 0, TBitwiseComple, TNeg, TNot, TLeftParen]) others
+      throwExpectError (Lexer.tokensFromList [Lexer.Constant 0, Lexer.BitwiseComple, Lexer.Neg, Lexer.Not, Lexer.LeftParen]) others
 
 -- | Parse a unaryOperator
 --
@@ -285,17 +285,17 @@ parseUnop :: Parser UnaryOperator
 parseUnop = do
   nextToken <- peek
   case nextToken of
-    Just TBitwiseComple -> do
+    Just Lexer.BitwiseComple -> do
       takeToken
       return Complement
-    Just TNeg -> do
+    Just Lexer.Neg -> do
       takeToken
       return Negate
-    Just TNot -> do
+    Just Lexer.Not -> do
       takeToken
       return Not
     others ->
-      throwExpectError (tokensFromList [TBitwiseComple, TNeg, TNot]) others
+      throwExpectError (Lexer.tokensFromList [Lexer.BitwiseComple, Lexer.Neg, Lexer.Not]) others
 
 -- | Parse a bineryOperator
 --
@@ -305,47 +305,47 @@ parseBinop :: Parser BinaryOperator
 parseBinop = do
   nextToken <- peek
   case nextToken of
-    Just TNeg -> do
+    Just Lexer.Neg -> do
       takeToken
       return Subtract
-    Just TPlus -> do
+    Just Lexer.Plus -> do
       takeToken
       return Add
-    Just TMul -> do
+    Just Lexer.Mul -> do
       takeToken
       return Multiply
-    Just TDiv -> do
+    Just Lexer.Div -> do
       takeToken
       return Divide
-    Just TRem -> do
+    Just Lexer.Rem -> do
       takeToken
       return Remainder
-    Just TAnd -> do
+    Just Lexer.And -> do
       takeToken
       return And
-    Just TOr -> do
+    Just Lexer.Or -> do
       takeToken
       return Or
-    Just TEQ -> do
+    Just Lexer.TEQ -> do
       takeToken
       return Equal
-    Just TNE -> do
+    Just Lexer.TNE -> do
       takeToken
       return NotEqual
-    Just TLT -> do
+    Just Lexer.TLT -> do
       takeToken
       return LessThan
-    Just TGT -> do
+    Just Lexer.TGT -> do
       takeToken
       return GreaterThan
-    Just TLE -> do
+    Just Lexer.TLE -> do
       takeToken
       return LessOrEqual
-    Just TGE -> do
+    Just Lexer.TGE -> do
       takeToken
       return GreaterOrEqual
     others ->
-      throwExpectError (tokensFromList [TNeg, TPlus, TMul, TDiv, TRem, TAnd, TOr, TEQ, TNE, TLT, TGT, TLE, TGE]) others
+      throwExpectError (Lexer.tokensFromList [Lexer.Neg, Lexer.Plus, Lexer.Mul, Lexer.Div, Lexer.Rem, Lexer.And, Lexer.Or, Lexer.TEQ, Lexer.TNE, Lexer.TLT, Lexer.TGT, Lexer.TLE, Lexer.TGE]) others
 
 -- | Parse an identifier
 --
@@ -354,11 +354,11 @@ parseIdentifier :: Parser Identifier
 parseIdentifier = do
   nextToken <- peek
   case nextToken of
-    Just (TIdentifier i) -> do
+    Just (Lexer.Identifier i) -> do
       takeToken
       return (Identifier i)
     others ->
-      throwExpectError (tokensFromList [TIdentifier ""]) others
+      throwExpectError (Lexer.tokensFromList [Lexer.Identifier ""]) others
 
 -- | Parse an integer
 --
@@ -367,8 +367,8 @@ parseInt :: Parser Int
 parseInt = do
   nextToken <- peek
   case nextToken of
-    Just (TConstant i) -> do
+    Just (Lexer.Constant i) -> do
       takeToken
       return i
     others ->
-      throwExpectError (tokensFromList [TConstant 0]) others
+      throwExpectError (Lexer.tokensFromList [Lexer.Constant 0]) others

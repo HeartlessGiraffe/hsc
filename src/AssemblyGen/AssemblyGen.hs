@@ -3,15 +3,15 @@
 {-# HLINT ignore "Use newtype instead of data" #-}
 module AssemblyGen.AssemblyGen
   ( -- * Assembly represented By ADT
-    AProgram (..),
-    AFuncDef (..),
-    AIdentifier (..),
-    AInstruction (..),
-    AUnaryOperator (..),
-    ABinaryOperator (..),
-    AOperand (..),
-    ACondCode(..),
-    AReg (..),
+    Program (..),
+    FuncDef (..),
+    Identifier (..),
+    Instruction (..),
+    UnaryOperator (..),
+    BinaryOperator (..),
+    Operand (..),
+    CondCode (..),
+    Reg (..),
 
     -- * Converting
     convertProgram,
@@ -28,7 +28,7 @@ where
 
 import Control.Monad.State
 import qualified Data.Map as M
-import TACKY.TACKY
+import qualified TACKY.TACKY as TACKY
 import qualified Text.PrettyPrint as PP
 import Utils (Pretty (..))
 
@@ -56,107 +56,107 @@ import Utils (Pretty (..))
 -- cond_code = E | NE | G | GE | L | LE
 -- reg = AX | DX | R10 | R11
 
-data AProgram = AProgram AFuncDef
+data Program = Program FuncDef
   deriving (Show, Eq)
 
-data AFuncDef = AFunction
-  { _aFuncName :: AIdentifier,
-    _aFuncInstructions :: [AInstruction]
+data FuncDef = Function
+  { _aFuncName :: Identifier,
+    _aFuncInstructions :: [Instruction]
   }
   deriving (Show, Eq)
 
-newtype AIdentifier = AIdentifier
-  { unAIdentifier :: String
+newtype Identifier = Identifier
+  { unIdentifier :: String
   }
   deriving (Show, Eq, Ord)
 
-data AInstruction
-  = AMov
-      { _aMovSrc :: AOperand,
-        _aMovDst :: AOperand
+data Instruction
+  = Mov
+      { _movSrc :: Operand,
+        _movDst :: Operand
       }
-  | AUnary AUnaryOperator AOperand
-  | ABinary ABinaryOperator AOperand AOperand
-  | ACmp AOperand AOperand
-  | AIdiv AOperand
-  | ACdq
-  | AJmp AIdentifier
-  | AJmpCC ACondCode AIdentifier
-  | ASetCC ACondCode AOperand
-  | ALabel AIdentifier
-  | AAllocateStack Int
-  | ARet
+  | Unary UnaryOperator Operand
+  | Binary BinaryOperator Operand Operand
+  | Cmp Operand Operand
+  | Idiv Operand
+  | Cdq
+  | Jmp Identifier
+  | JmpCC CondCode Identifier
+  | SetCC CondCode Operand
+  | Label Identifier
+  | AllocateStack Int
+  | Ret
   deriving (Show, Eq)
 
-data AUnaryOperator = ANeg | ANot
+data UnaryOperator = Neg | Not
   deriving (Show, Eq)
 
-data ABinaryOperator = AAdd | ASub | AMult
+data BinaryOperator = Add | Sub | Mult
   deriving (Show, Eq)
 
-data AOperand = AImm Int | ARegister AReg | APseudo AIdentifier | AStack Int
+data Operand = Imm Int | Register Reg | Pseudo Identifier | Stack Int
   deriving (Show, Eq)
 
-data ACondCode = E | NE | G | GE | L | LE
+data CondCode = E | NE | G | GE | L | LE
   deriving (Show, Eq)
 
-data AReg = AX | DX | R10 | R11
+data Reg = AX | DX | R10 | R11
   deriving (Show, Eq)
 
 -- **  Pretty Printing
 
-instance Pretty AProgram where
-  pretty (AProgram funcDef) =
-    PP.text "AProgram {" PP.$$ PP.nest 2 (pretty funcDef) PP.$$ PP.text "}"
+instance Pretty Program where
+  pretty (Program funcDef) =
+    PP.text "Program {" PP.$$ PP.nest 2 (pretty funcDef) PP.$$ PP.text "}"
 
-instance Pretty AFuncDef where
-  pretty (AFunction name instructions) =
-    PP.text "AFunction {" PP.$$ PP.nest 2 (pretty name) PP.$$ PP.nest 2 (PP.vcat (map pretty instructions)) PP.$$ PP.text "}"
+instance Pretty FuncDef where
+  pretty (Function name instructions) =
+    PP.text "Function {" PP.$$ PP.nest 2 (pretty name) PP.$$ PP.nest 2 (PP.vcat (map pretty instructions)) PP.$$ PP.text "}"
 
-instance Pretty AIdentifier where
-  pretty (AIdentifier name) = PP.text name
+instance Pretty Identifier where
+  pretty (Identifier name) = PP.text name
 
-instance Pretty AInstruction where
-  pretty (AMov src dst) =
-    PP.text "AMov" PP.<+> (pretty src <> PP.text ",") PP.<+> pretty dst
-  pretty (AUnary operator oprand) =
-    PP.text "AUnary" PP.<+> (pretty operator <> PP.text ",") PP.<+> pretty oprand
-  pretty (ABinary operator oprand1 oprand2) =
-    PP.text "ABinary" PP.<+> (pretty operator <> PP.text ",") PP.<+> (pretty oprand1 <> PP.text ",") PP.<+> pretty oprand2
-  pretty (ACmp oprand1 oprand2) =
-    PP.text "ACmp" PP.<+> (pretty oprand1 <> PP.text ",") PP.<+> pretty oprand2
-  pretty (AIdiv operator) =
-    PP.text "AIdiv" PP.<+> pretty operator
-  pretty ACdq =
-    PP.text "ACdq"
-  pretty (AJmp i) =
-    PP.text "AJmp" PP.<+> pretty i
-  pretty (AJmpCC cc i) =
-    PP.text "AJmpCC" PP.<+> (pretty cc <> PP.text ",") PP.<+> pretty i
-  pretty (ASetCC cc oprand) =
-    PP.text "AJmpCC" PP.<+> (pretty cc <> PP.text ",") PP.<+> pretty oprand
-  pretty (ALabel i) =
-    PP.text "ALabel" PP.<+> pretty i
-  pretty (AAllocateStack i) =
-    PP.text "AAllocateStack" PP.<+> PP.int i
-  pretty ARet = PP.text "ARet"
+instance Pretty Instruction where
+  pretty (Mov src dst) =
+    PP.text "Mov" PP.<+> (pretty src <> PP.text ",") PP.<+> pretty dst
+  pretty (Unary operator oprand) =
+    PP.text "Unary" PP.<+> (pretty operator <> PP.text ",") PP.<+> pretty oprand
+  pretty (Binary operator oprand1 oprand2) =
+    PP.text "Binary" PP.<+> (pretty operator <> PP.text ",") PP.<+> (pretty oprand1 <> PP.text ",") PP.<+> pretty oprand2
+  pretty (Cmp oprand1 oprand2) =
+    PP.text "Cmp" PP.<+> (pretty oprand1 <> PP.text ",") PP.<+> pretty oprand2
+  pretty (Idiv operator) =
+    PP.text "Idiv" PP.<+> pretty operator
+  pretty Cdq =
+    PP.text "Cdq"
+  pretty (Jmp i) =
+    PP.text "Jmp" PP.<+> pretty i
+  pretty (JmpCC cc i) =
+    PP.text "JmpCC" PP.<+> (pretty cc <> PP.text ",") PP.<+> pretty i
+  pretty (SetCC cc oprand) =
+    PP.text "JmpCC" PP.<+> (pretty cc <> PP.text ",") PP.<+> pretty oprand
+  pretty (Label i) =
+    PP.text "Label" PP.<+> pretty i
+  pretty (AllocateStack i) =
+    PP.text "AllocateStack" PP.<+> PP.int i
+  pretty Ret = PP.text "Ret"
 
-instance Pretty AOperand where
-  pretty (AImm i) = PP.text "AImm" PP.<+> PP.int i
-  pretty (ARegister reg) = PP.text "ARegister" PP.<+> pretty reg
-  pretty (APseudo i) = PP.text "APseudo" PP.<+> pretty i
-  pretty (AStack i) = PP.text "AStack" PP.<+> PP.int i
+instance Pretty Operand where
+  pretty (Imm i) = PP.text "Imm" PP.<+> PP.int i
+  pretty (Register reg) = PP.text "Register" PP.<+> pretty reg
+  pretty (Pseudo i) = PP.text "Pseudo" PP.<+> pretty i
+  pretty (Stack i) = PP.text "Stack" PP.<+> PP.int i
 
-instance Pretty AUnaryOperator where
-  pretty ANeg = PP.text "ANeg"
-  pretty ANot = PP.text "ANot"
+instance Pretty UnaryOperator where
+  pretty Neg = PP.text "Neg"
+  pretty Not = PP.text "Not"
 
-instance Pretty ABinaryOperator where
-  pretty AAdd = PP.text "AAdd"
-  pretty ASub = PP.text "ASub"
-  pretty AMult = PP.text "AMult"
+instance Pretty BinaryOperator where
+  pretty Add = PP.text "Add"
+  pretty Sub = PP.text "Sub"
+  pretty Mult = PP.text "Mult"
 
-instance Pretty ACondCode where
+instance Pretty CondCode where
   pretty E = PP.text "E"
   pretty NE = PP.text "NE"
   pretty G = PP.text "G"
@@ -164,7 +164,7 @@ instance Pretty ACondCode where
   pretty L = PP.text "L"
   pretty LE = PP.text "LE"
 
-instance Pretty AReg where
+instance Pretty Reg where
   pretty AX = PP.text "AX"
   pretty DX = PP.text "DX"
   pretty R10 = PP.text "R10"
@@ -196,104 +196,104 @@ instance Pretty AReg where
 -- binary_operator = Add | Sub | Mult
 -- operand = Imm(int) | Reg(reg) | Pseudo(identifier) | Stack(int)
 -- reg = AX | DX | R10 | R11
-convertProgram :: TKProgram -> AProgram
-convertProgram (TKProgram funcDef) = AProgram (convertFunction funcDef)
+convertProgram :: TACKY.Program -> Program
+convertProgram (TACKY.Program funcDef) = Program (convertFunction funcDef)
 
-convertFunction :: TKFuncDef -> AFuncDef
-convertFunction (TKFunction name instuctions) =
-  AFunction (convertIdentifier name) (concatMap convertInstruction instuctions)
+convertFunction :: TACKY.FuncDef -> FuncDef
+convertFunction (TACKY.Function name instuctions) =
+  Function (convertIdentifier name) (concatMap convertInstruction instuctions)
 
-convertInstruction :: TKInstruction -> [AInstruction]
-convertInstruction (TKReturn val) =
-  [ AMov (convertVal val) (ARegister AX),
-    ARet
+convertInstruction :: TACKY.Instruction -> [Instruction]
+convertInstruction (TACKY.Return val) =
+  [ Mov (convertVal val) (Register AX),
+    Ret
   ]
-convertInstruction (TKUnary TKNot src dst) =
-  [ ACmp (AImm 0) (convertVal src),
-    AMov (AImm 0) (convertVal dst),
-    ASetCC E (convertVal dst)
+convertInstruction (TACKY.Unary TACKY.Not src dst) =
+  [ Cmp (Imm 0) (convertVal src),
+    Mov (Imm 0) (convertVal dst),
+    SetCC E (convertVal dst)
   ]
-convertInstruction (TKUnary uOperator src dst) =
-  [ AMov (convertVal src) (convertVal dst),
-    AUnary (convertUnaryOperator uOperator) (convertVal dst)
+convertInstruction (TACKY.Unary uOperator src dst) =
+  [ Mov (convertVal src) (convertVal dst),
+    Unary (convertUnaryOperator uOperator) (convertVal dst)
   ]
-convertInstruction (TKBinary TKDivide src1 src2 dst) =
-  [ AMov (convertVal src1) (ARegister AX),
-    ACdq,
-    AIdiv (convertVal src2),
-    AMov (ARegister AX) (convertVal dst)
+convertInstruction (TACKY.Binary TACKY.Divide src1 src2 dst) =
+  [ Mov (convertVal src1) (Register AX),
+    Cdq,
+    Idiv (convertVal src2),
+    Mov (Register AX) (convertVal dst)
   ]
-convertInstruction (TKBinary TKRemainder src1 src2 dst) =
-  [ AMov (convertVal src1) (ARegister AX),
-    ACdq,
-    AIdiv (convertVal src2),
-    AMov (ARegister DX) (convertVal dst)
+convertInstruction (TACKY.Binary TACKY.Remainder src1 src2 dst) =
+  [ Mov (convertVal src1) (Register AX),
+    Cdq,
+    Idiv (convertVal src2),
+    Mov (Register DX) (convertVal dst)
   ]
-convertInstruction (TKBinary bOperator src1 src2 dst) =
-  if isRelationalOperator bOperator
+convertInstruction (TACKY.Binary bOperator src1 src2 dst) =
+  if TACKY.isRelationalOperator bOperator
     then
-      [ ACmp (convertVal src2) (convertVal src1),
-        AMov (AImm 0) (convertVal dst),
-        ASetCC (convertComparison bOperator) (convertVal dst)
+      [ Cmp (convertVal src2) (convertVal src1),
+        Mov (Imm 0) (convertVal dst),
+        SetCC (convertComparison bOperator) (convertVal dst)
       ]
     else
-      [ AMov (convertVal src1) (convertVal dst),
-        ABinary (convertBinaryOperator bOperator) (convertVal src2) (convertVal dst)
+      [ Mov (convertVal src1) (convertVal dst),
+        Binary (convertBinaryOperator bOperator) (convertVal src2) (convertVal dst)
       ]
-convertInstruction (TKJumpIfZero val target) =
-  [ ACmp (AImm 0) (convertVal val),
-    AJmpCC E (convertIdentifier target)
+convertInstruction (TACKY.JumpIfZero val target) =
+  [ Cmp (Imm 0) (convertVal val),
+    JmpCC E (convertIdentifier target)
   ]
-convertInstruction (TKJumpIfNotZero val target) =
-  [ ACmp (AImm 0) (convertVal val),
-    AJmpCC NE (convertIdentifier target)
+convertInstruction (TACKY.JumpIfNotZero val target) =
+  [ Cmp (Imm 0) (convertVal val),
+    JmpCC NE (convertIdentifier target)
   ]
-convertInstruction (TKJump target) =
-  [ AJmp (convertIdentifier target)
+convertInstruction (TACKY.Jump target) =
+  [ Jmp (convertIdentifier target)
   ]
-convertInstruction (TKLabel name) =
-  [ ALabel (convertIdentifier name)
+convertInstruction (TACKY.Label name) =
+  [ Label (convertIdentifier name)
   ]
-convertInstruction (TKCopy src dst) =
-  [ AMov (convertVal src) (convertVal dst)
+convertInstruction (TACKY.Copy src dst) =
+  [ Mov (convertVal src) (convertVal dst)
   ]
 
-convertIdentifier :: TKIdentifier -> AIdentifier
-convertIdentifier (TKIdentifier name) = AIdentifier name
+convertIdentifier :: TACKY.Identifier -> Identifier
+convertIdentifier (TACKY.Identifier name) = Identifier name
 
-convertUnaryOperator :: TKUnaryOperator -> AUnaryOperator
-convertUnaryOperator TKComplement = ANot
-convertUnaryOperator TKNegate = ANeg
-convertUnaryOperator TKNot = ANot
+convertUnaryOperator :: TACKY.UnaryOperator -> UnaryOperator
+convertUnaryOperator TACKY.Complement = Not
+convertUnaryOperator TACKY.Negate = Neg
+convertUnaryOperator TACKY.Not = Not
 
-convertComparison :: TKBinaryOperator -> ACondCode
-convertComparison TKEqual = E
-convertComparison TKNotEqual = NE
-convertComparison TKLessThan = L
-convertComparison TKLessOrEqual = LE
-convertComparison TKGreaterThan = G
-convertComparison TKGreaterOrEqual = GE
+convertComparison :: TACKY.BinaryOperator -> CondCode
+convertComparison TACKY.Equal = E
+convertComparison TACKY.NotEqual = NE
+convertComparison TACKY.LessThan = L
+convertComparison TACKY.LessOrEqual = LE
+convertComparison TACKY.GreaterThan = G
+convertComparison TACKY.GreaterOrEqual = GE
 convertComparison op = error $ "convertComparison: " ++ show op ++ " shouldn't be convert!"
 
-convertBinaryOperator :: TKBinaryOperator -> ABinaryOperator
-convertBinaryOperator TKAdd = AAdd
-convertBinaryOperator TKSubtract = ASub
-convertBinaryOperator TKMultiply = AMult
+convertBinaryOperator :: TACKY.BinaryOperator -> BinaryOperator
+convertBinaryOperator TACKY.Add = Add
+convertBinaryOperator TACKY.Subtract = Sub
+convertBinaryOperator TACKY.Multiply = Mult
 convertBinaryOperator op = error $ "convertBinaryOperator: " ++ show op ++ " shouldn't be convert!"
 
-convertVal :: TKVal -> AOperand
-convertVal (TKConstant i) = AImm i
-convertVal (TKVar i) = APseudo (convertIdentifier i)
+convertVal :: TACKY.Val -> Operand
+convertVal (TACKY.Constant i) = Imm i
+convertVal (TACKY.Var i) = Pseudo (convertIdentifier i)
 
 -- * replacing pseudoregisters
 
 type Offset = Int
 
 newtype IdentifierOffsets = IdentifierOffsets
-  { unIdentifierOffsets :: M.Map AIdentifier Offset
+  { unIdentifierOffsets :: M.Map Identifier Offset
   }
 
-addToTable :: AIdentifier -> Offset -> IdentifierOffsets -> IdentifierOffsets
+addToTable :: Identifier -> Offset -> IdentifierOffsets -> IdentifierOffsets
 addToTable identifier offset (IdentifierOffsets table) =
   IdentifierOffsets $ M.insert identifier offset table
 
@@ -305,102 +305,102 @@ totalOffset (IdentifierOffsets table) = 4 * M.size table
 
 type ReplacingPseudoReg = State IdentifierOffsets
 
-allocatePseudoReg :: AOperand -> ReplacingPseudoReg AOperand
-allocatePseudoReg (APseudo identifier) = do
+allocatePseudoReg :: Operand -> ReplacingPseudoReg Operand
+allocatePseudoReg (Pseudo identifier) = do
   table <- gets unIdentifierOffsets
   case table M.!? identifier of
-    Just offset -> return (AStack offset)
+    Just offset -> return (Stack offset)
     Nothing ->
       let offset = -4 - M.size table * 4
        in do
             modify (addToTable identifier offset)
-            return (AStack offset)
+            return (Stack offset)
 allocatePseudoReg others = return others
 
-replaceAPseudoReg :: AInstruction -> ReplacingPseudoReg AInstruction
-replaceAPseudoReg instruction =
+replacePseudoReg :: Instruction -> ReplacingPseudoReg Instruction
+replacePseudoReg instruction =
   case instruction of
-    AMov src dst -> do
+    Mov src dst -> do
       src' <- allocatePseudoReg src
       dst' <- allocatePseudoReg dst
-      return (AMov src' dst')
-    AUnary operator operand -> do
+      return (Mov src' dst')
+    Unary operator operand -> do
       operand' <- allocatePseudoReg operand
-      return $ AUnary operator operand'
-    ABinary operator operand1 operand2 -> do
+      return $ Unary operator operand'
+    Binary operator operand1 operand2 -> do
       operand1' <- allocatePseudoReg operand1
       operand2' <- allocatePseudoReg operand2
-      return $ ABinary operator operand1' operand2'
-    AIdiv operand -> do
+      return $ Binary operator operand1' operand2'
+    Idiv operand -> do
       operand' <- allocatePseudoReg operand
-      return $ AIdiv operand'
-    ACmp operand1 operand2 -> do 
+      return $ Idiv operand'
+    Cmp operand1 operand2 -> do
       operand1' <- allocatePseudoReg operand1
       operand2' <- allocatePseudoReg operand2
-      return $ ACmp operand1' operand2'
-    ASetCC opecode operand -> do 
+      return $ Cmp operand1' operand2'
+    SetCC opecode operand -> do
       operand' <- allocatePseudoReg operand
-      return $ ASetCC opecode operand'
+      return $ SetCC opecode operand'
     others -> return others
 
-replacePseudoRegs :: (Traversable t) => t AInstruction -> (Offset, t AInstruction)
+replacePseudoRegs :: (Traversable t) => t Instruction -> (Offset, t Instruction)
 replacePseudoRegs instructions =
   let (instructions', table) =
-        runState (traverse replaceAPseudoReg instructions) initIdentifierOffsets
+        runState (traverse replacePseudoReg instructions) initIdentifierOffsets
    in (totalOffset table, instructions')
 
-convertProgramWithReplacePseudoRegs :: TKProgram -> (Offset, AProgram)
+convertProgramWithReplacePseudoRegs :: TACKY.Program -> (Offset, Program)
 convertProgramWithReplacePseudoRegs tkP =
-  let (AProgram (AFunction name instructions)) = convertProgram tkP
+  let (Program (Function name instructions)) = convertProgram tkP
       (offset, instructions') = replacePseudoRegs instructions
-   in (offset, AProgram (AFunction name instructions'))
+   in (offset, Program (Function name instructions'))
 
 -- * fixing up instructions
 
-convertProgramWithFixedInstructions :: TKProgram -> AProgram
+convertProgramWithFixedInstructions :: TACKY.Program -> Program
 convertProgramWithFixedInstructions tkProgram =
-  let (offset, AProgram (AFunction name instructions)) = convertProgramWithReplacePseudoRegs tkProgram
+  let (offset, Program (Function name instructions)) = convertProgramWithReplacePseudoRegs tkProgram
       instructions' = allocateStack offset : instructions
-   in AProgram (AFunction name (fixInstructions instructions'))
+   in Program (Function name (fixInstructions instructions'))
 
 -- ** insert allocateStack
 
-allocateStack :: Offset -> AInstruction
-allocateStack = AAllocateStack
+allocateStack :: Offset -> Instruction
+allocateStack = AllocateStack
 
 -- ** invalid mov idiv add sub imul instructions
 
-fixIns :: AInstruction -> [AInstruction]
-fixIns (AMov (AStack src) (AStack dst)) =
-  [ AMov (AStack src) (ARegister R10),
-    AMov (ARegister R10) (AStack dst)
+fixIns :: Instruction -> [Instruction]
+fixIns (Mov (Stack src) (Stack dst)) =
+  [ Mov (Stack src) (Register R10),
+    Mov (Register R10) (Stack dst)
   ]
-fixIns (AIdiv (AImm number)) =
-  [ AMov (AImm number) (ARegister R10),
-    AIdiv (ARegister R10)
+fixIns (Idiv (Imm number)) =
+  [ Mov (Imm number) (Register R10),
+    Idiv (Register R10)
   ]
-fixIns (ABinary AAdd (AStack src) (AStack dst)) =
-  [ AMov (AStack src) (ARegister R10),
-    ABinary AAdd (ARegister R10) (AStack dst)
+fixIns (Binary Add (Stack src) (Stack dst)) =
+  [ Mov (Stack src) (Register R10),
+    Binary Add (Register R10) (Stack dst)
   ]
-fixIns (ABinary ASub (AStack src) (AStack dst)) =
-  [ AMov (AStack src) (ARegister R10),
-    ABinary ASub (ARegister R10) (AStack dst)
+fixIns (Binary Sub (Stack src) (Stack dst)) =
+  [ Mov (Stack src) (Register R10),
+    Binary Sub (Register R10) (Stack dst)
   ]
-fixIns (ABinary AMult src (AStack dst)) =
-  [ AMov (AStack dst) (ARegister R11),
-    ABinary AMult src (ARegister R11),
-    AMov (ARegister R11) (AStack dst)
+fixIns (Binary Mult src (Stack dst)) =
+  [ Mov (Stack dst) (Register R11),
+    Binary Mult src (Register R11),
+    Mov (Register R11) (Stack dst)
   ]
-fixIns (ACmp (AStack src) (AStack dst)) = 
-  [ AMov (AStack src) (ARegister R10),
-    ACmp (ARegister R10) (AStack dst)
+fixIns (Cmp (Stack src) (Stack dst)) =
+  [ Mov (Stack src) (Register R10),
+    Cmp (Register R10) (Stack dst)
   ]
-fixIns (ACmp src (AImm i)) = 
-  [ AMov (AImm i) (ARegister R11),
-    ACmp src (ARegister R11)
+fixIns (Cmp src (Imm i)) =
+  [ Mov (Imm i) (Register R11),
+    Cmp src (Register R11)
   ]
 fixIns other = [other]
 
-fixInstructions :: (Foldable t) => t AInstruction -> [AInstruction]
+fixInstructions :: (Foldable t) => t Instruction -> [Instruction]
 fixInstructions = concatMap fixIns

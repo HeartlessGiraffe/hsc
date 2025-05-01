@@ -50,45 +50,45 @@ type TokenRegex = String
 -- | Token
 data Token
   = -- | 标识符
-    TIdentifier String
+    Identifier String
   | -- | 常量
-    TConstant Int
+    Constant Int
   | -- | int 关键字
-    TIntKeyword
+    IntKeyword
   | -- | void 关键字
-    TVoidKeyword
+    VoidKeyword
   | -- | return 关键字
-    TReturnKeyword
+    ReturnKeyword
   | -- | 左括号
-    TLeftParen
+    LeftParen
   | -- | 右括号
-    TRightParen
+    RightParen
   | -- | 左大括号
-    TLeftBrace
+    LeftBrace
   | -- | 右大括号
-    TRightBrace
+    RightBrace
   | -- | 分号
-    TSemicolon
+    Semicolon
   | -- | 按位补
-    TBitwiseComple
+    BitwiseComple
   | -- | 相反数
-    TNeg
+    Neg
   | -- | 自减
-    TDecre
+    Decre
   | -- | 加
-    TPlus
+    Plus
   | -- | 乘
-    TMul
+    Mul
   | -- | 除以
-    TDiv
+    Div
   | -- | 求余
-    TRem
+    Rem
   | -- | 逻辑非
-    TNot
+    Not
   | -- | 逻辑与
-    TAnd
+    And
   | -- | 逻辑或
-    TOr
+    Or
   | -- | 等于
     TEQ
   | -- | 不等于
@@ -250,26 +250,26 @@ tokenRegexes :: [(TokenRegex, Token)]
 tokenRegexes =
   -- 需要从字符串开头开始匹配, 因此需要加上边界符号
   first (startRegex <>)
-    <$> [ (identifierRegex, TIdentifier ""),
-          (constantRegex, TConstant 0),
-          (intKeywordRegex, TIntKeyword),
-          (voidKeywordRegex, TVoidKeyword),
-          (returnKeywordRegex, TReturnKeyword),
-          (leftParenRegex, TLeftParen),
-          (rightParenRegex, TRightParen),
-          (leftBraceRegex, TLeftBrace),
-          (rightBraceRegex, TRightBrace),
-          (semicolonRegex, TSemicolon),
-          (bitwiseCompleRegex, TBitwiseComple),
-          (negRegex, TNeg),
-          (decreRegex, TDecre),
-          (plusRegex, TPlus),
-          (mulRegex, TMul),
-          (divRegex, TDiv),
-          (remRegex, TRem),
-          (notRegex, TNot),
-          (andRegex, TAnd),
-          (orRegex, TOr),
+    <$> [ (identifierRegex, Identifier ""),
+          (constantRegex, Constant 0),
+          (intKeywordRegex, IntKeyword),
+          (voidKeywordRegex, VoidKeyword),
+          (returnKeywordRegex, ReturnKeyword),
+          (leftParenRegex, LeftParen),
+          (rightParenRegex, RightParen),
+          (leftBraceRegex, LeftBrace),
+          (rightBraceRegex, RightBrace),
+          (semicolonRegex, Semicolon),
+          (bitwiseCompleRegex, BitwiseComple),
+          (negRegex, Neg),
+          (decreRegex, Decre),
+          (plusRegex, Plus),
+          (mulRegex, Mul),
+          (divRegex, Div),
+          (remRegex, Rem),
+          (notRegex, Not),
+          (andRegex, And),
+          (orRegex, Or),
           (eqRegex, TEQ),
           (neqRegex, TNE),
           (ltRegex, TLT),
@@ -280,20 +280,20 @@ tokenRegexes =
 
 -- | Token是二元表达式
 isTBinary :: Token -> Bool
-isTBinary TNeg = True
-isTBinary TPlus = True
-isTBinary TMul = True
-isTBinary TDiv = True
-isTBinary TRem = True
-isTBinary TNot = True 
-isTBinary TAnd = True 
-isTBinary TOr = True 
-isTBinary TEQ = True 
-isTBinary TNE = True 
-isTBinary TLT = True 
-isTBinary TGT = True 
-isTBinary TLE = True 
-isTBinary TGE = True 
+isTBinary Neg = True
+isTBinary Plus = True
+isTBinary Mul = True
+isTBinary Div = True
+isTBinary Rem = True
+isTBinary Not = True
+isTBinary And = True
+isTBinary Or = True
+isTBinary TEQ = True
+isTBinary TNE = True
+isTBinary TLT = True
+isTBinary TGT = True
+isTBinary TLE = True
+isTBinary TGE = True
 isTBinary _ = False
 
 -- | 优先级
@@ -305,19 +305,19 @@ minimumPrecedence = 0
 
 -- | Token的优先级
 precedence :: Token -> Precedence
-precedence TPlus = 45
-precedence TNeg = 45
-precedence TMul = 50
-precedence TDiv = 50
-precedence TRem = 50
+precedence Plus = 45
+precedence Neg = 45
+precedence Mul = 50
+precedence Div = 50
+precedence Rem = 50
 precedence TLT = 35
 precedence TLE = 35
 precedence TGT = 35
 precedence TGE = 35
 precedence TEQ = 30
 precedence TNE = 30
-precedence TAnd = 10
-precedence TOr = 5
+precedence And = 10
+precedence Or = 5
 precedence _ = -1
 
 -- | Token是二元操作符
@@ -330,32 +330,32 @@ mTPrecedenceGEt pre = maybe False (\x -> precedence x >= pre)
 
 -- | 把单次匹配处理成 Token
 toToken :: Match -> Token -> Token
-toToken match (TIdentifier _) = identifierToKeyword $ TIdentifier match
-toToken match (TConstant _) = TConstant (fromJust $ readMaybe match)
+toToken match (Identifier _) = identifierToKeyword $ Identifier match
+toToken match (Constant _) = Constant (fromJust $ readMaybe match)
 toToken _ t = t
 
 -- | Token 长度
 lenToken :: Token -> Int
-lenToken (TIdentifier iStr) = length iStr
-lenToken (TConstant cInt) = length (show cInt)
-lenToken TIntKeyword = 3
-lenToken TVoidKeyword = 4
-lenToken TReturnKeyword = 6
-lenToken TLeftParen = 1
-lenToken TRightParen = 1
-lenToken TLeftBrace = 1
-lenToken TRightBrace = 1
-lenToken TSemicolon = 1
-lenToken TBitwiseComple = 1
-lenToken TNeg = 1
-lenToken TDecre = 2
-lenToken TPlus = 1
-lenToken TMul = 1
-lenToken TDiv = 1
-lenToken TRem = 1
-lenToken TNot = 1
-lenToken TAnd = 2
-lenToken TOr = 2
+lenToken (Identifier iStr) = length iStr
+lenToken (Constant cInt) = length (show cInt)
+lenToken IntKeyword = 3
+lenToken VoidKeyword = 4
+lenToken ReturnKeyword = 6
+lenToken LeftParen = 1
+lenToken RightParen = 1
+lenToken LeftBrace = 1
+lenToken RightBrace = 1
+lenToken Semicolon = 1
+lenToken BitwiseComple = 1
+lenToken Neg = 1
+lenToken Decre = 2
+lenToken Plus = 1
+lenToken Mul = 1
+lenToken Div = 1
+lenToken Rem = 1
+lenToken Not = 1
+lenToken And = 2
+lenToken Or = 2
 lenToken TEQ = 2
 lenToken TNE = 2
 lenToken TGT = 1
@@ -365,11 +365,11 @@ lenToken TLE = 2
 
 -- | 如果标识符是关键字, 则将其视为关键字
 identifierToKeyword :: Token -> Token
-identifierToKeyword (TIdentifier name)
-  | name == "int" = TIntKeyword
-  | name == "void" = TVoidKeyword
-  | name == "return" = TReturnKeyword
-  | otherwise = TIdentifier name
+identifierToKeyword (Identifier name)
+  | name == "int" = IntKeyword
+  | name == "void" = VoidKeyword
+  | name == "return" = ReturnKeyword
+  | otherwise = Identifier name
 identifierToKeyword token = token
 
 -- | 针对代码文本, 遍历所有的Token对应的正则表达式, 找到匹配

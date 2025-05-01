@@ -7,13 +7,13 @@ module TACKY.TACKY
   ( -- * TACKY AST
 
     -- ** AST Definition
-    TKIdentifier (..),
-    TKProgram (..),
-    TKFuncDef (..),
-    TKInstruction (..),
-    TKVal (..),
-    TKUnaryOperator (..),
-    TKBinaryOperator (..),
+    Identifier (..),
+    Program (..),
+    FuncDef (..),
+    Instruction (..),
+    Val (..),
+    UnaryOperator (..),
+    BinaryOperator (..),
     isRelationalOperator,
 
     -- * TAKCY Generation
@@ -26,12 +26,12 @@ module TACKY.TACKY
     makeTmp,
 
     -- ** Generating TACKY
-    genTKProgram,
+    genProgram,
   )
 where
 
 import Control.Monad.State
-import Parser.Parser
+import qualified Parser.Parser as Parser
 import qualified Text.PrettyPrint as PP
 import Utils (Pretty (..))
 
@@ -54,137 +54,137 @@ import Utils (Pretty (..))
 -- binary_operator = Add | Subtract | Multiply | Divide | Remainder | Equal | NotEqual
 --                 | LessThan | LessOrEqual | GreaterThan | GreaterOrEqual
 
-newtype TKIdentifier = TKIdentifier
-  {unTKIdentifier :: String}
+newtype Identifier = Identifier
+  {unIdentifier :: String}
   deriving (Show, Eq)
 
-data TKProgram = TKProgram TKFuncDef deriving (Show, Eq)
+data Program = Program FuncDef deriving (Show, Eq)
 
-data TKFuncDef = TKFunction
-  { _funcName :: TKIdentifier,
-    _funcBody :: [TKInstruction]
+data FuncDef = Function
+  { _funcName :: Identifier,
+    _funcBody :: [Instruction]
   }
   deriving (Show, Eq)
 
-data TKInstruction
-  = TKReturn TKVal
-  | TKUnary
-      { _uoperator :: TKUnaryOperator,
-        _src :: TKVal,
-        _dst :: TKVal
+data Instruction
+  = Return Val
+  | Unary
+      { _uoperator :: UnaryOperator,
+        _src :: Val,
+        _dst :: Val
       }
-  | TKBinary
-      { _boperator :: TKBinaryOperator,
-        _src1 :: TKVal,
-        _src2 :: TKVal,
-        _dst :: TKVal
+  | Binary
+      { _boperator :: BinaryOperator,
+        _src1 :: Val,
+        _src2 :: Val,
+        _dst :: Val
       }
-  | TKCopy
-      { _src :: TKVal,
-        _dst :: TKVal
+  | Copy
+      { _src :: Val,
+        _dst :: Val
       }
-  | TKJump
-      { _target :: TKIdentifier
+  | Jump
+      { _target :: Identifier
       }
-  | TKJumpIfZero
-      { _condition :: TKVal,
-        _target :: TKIdentifier
+  | JumpIfZero
+      { _condition :: Val,
+        _target :: Identifier
       }
-  | TKJumpIfNotZero
-      { _condition :: TKVal,
-        _target :: TKIdentifier
+  | JumpIfNotZero
+      { _condition :: Val,
+        _target :: Identifier
       }
-  | TKLabel TKIdentifier
+  | Label Identifier
   deriving (Show, Eq)
 
-data TKVal = TKConstant Int | TKVar TKIdentifier
+data Val = Constant Int | Var Identifier
   deriving (Show, Eq)
 
-isTKConstant :: TKVal -> Bool
-isTKConstant (TKConstant _) = True
-isTKConstant _ = False
+isConstant :: Val -> Bool
+isConstant (Constant _) = True
+isConstant _ = False
 
-data TKUnaryOperator = TKComplement | TKNegate | TKNot
+data UnaryOperator = Complement | Negate | Not
   deriving (Show, Eq)
 
-data TKBinaryOperator
-  = TKAdd
-  | TKSubtract
-  | TKMultiply
-  | TKDivide
-  | TKRemainder
-  | TKEqual
-  | TKNotEqual
-  | TKLessThan
-  | TKLessOrEqual
-  | TKGreaterThan
-  | TKGreaterOrEqual
+data BinaryOperator
+  = Add
+  | Subtract
+  | Multiply
+  | Divide
+  | Remainder
+  | Equal
+  | NotEqual
+  | LessThan
+  | LessOrEqual
+  | GreaterThan
+  | GreaterOrEqual
   deriving (Show, Eq)
 
-isRelationalOperator :: TKBinaryOperator -> Bool 
-isRelationalOperator TKEqual = True 
-isRelationalOperator TKNotEqual = True 
-isRelationalOperator TKLessThan = True 
-isRelationalOperator TKLessOrEqual = True 
-isRelationalOperator TKGreaterThan = True 
-isRelationalOperator TKGreaterOrEqual = True 
+isRelationalOperator :: BinaryOperator -> Bool
+isRelationalOperator Equal = True
+isRelationalOperator NotEqual = True
+isRelationalOperator LessThan = True
+isRelationalOperator LessOrEqual = True
+isRelationalOperator GreaterThan = True
+isRelationalOperator GreaterOrEqual = True
 isRelationalOperator _ = False
 
 -- ** Pretty
 
-instance Pretty TKIdentifier where
-  pretty (TKIdentifier name) = PP.text name
+instance Pretty Identifier where
+  pretty (Identifier name) = PP.text name
 
-instance Pretty TKProgram where
-  pretty (TKProgram funcDef) =
-    PP.text "TKProgram {" PP.$$ PP.nest 2 (pretty funcDef) PP.$$ PP.text "}"
+instance Pretty Program where
+  pretty (Program funcDef) =
+    PP.text "Program {" PP.$$ PP.nest 2 (pretty funcDef) PP.$$ PP.text "}"
 
-instance Pretty TKFuncDef where
-  pretty (TKFunction name body) =
-    PP.text "TKFunction (" <> pretty name <> PP.text ") {" PP.$$ PP.nest 2 (PP.sep (pretty <$> body)) PP.$$ PP.text "}"
+instance Pretty FuncDef where
+  pretty (Function name body) =
+    PP.text "Function (" <> pretty name <> PP.text ") {" PP.$$ PP.nest 2 (PP.sep (pretty <$> body)) PP.$$ PP.text "}"
 
-instance Pretty TKInstruction where
-  pretty (TKReturn expr) =
-    PP.text "TKReturn(" <> pretty expr <> PP.text ")"
-  pretty (TKUnary op src dst) =
-    PP.text "TKUnary(" <> pretty op <> PP.text ", " <> pretty src <> PP.text ", " <> pretty dst <> PP.text ")"
-  pretty (TKBinary op src1 src2 dst) =
-    if isTKConstant src1 && isTKConstant src2 && isTKConstant dst
+instance Pretty Instruction where
+  pretty (Return expr) =
+    PP.text "Return(" <> pretty expr <> PP.text ")"
+  pretty (Unary op src dst) =
+    PP.text "Unary(" <> pretty op <> PP.text ", " <> pretty src <> PP.text ", " <> pretty dst <> PP.text ")"
+  pretty (Binary op src1 src2 dst) =
+    if isConstant src1 && isConstant src2 && isConstant dst
       then
-        PP.text "TKBinary(" <> pretty op <> PP.text ", " <> pretty src1 <> PP.text ", " <> pretty src2 <> PP.text ", " <> pretty dst <> PP.text ")"
-      else PP.text "TKBinary(" PP.$$ PP.nest 2 (pretty op) <> PP.text ", " PP.$$ PP.nest 2 (pretty src1) PP.$$ PP.nest 2 (pretty src2) <> PP.text ", " PP.$$ PP.nest 2 (pretty dst) PP.$$ PP.text ")"
-  pretty (TKCopy src dst) =
-    PP.text "TKCopy(" <> pretty src <> PP.text ", " <> pretty dst <> PP.text ")"
-  pretty (TKJump target) =
-    PP.text "TKJump(" <> pretty target <> PP.text ")"
-  pretty (TKJumpIfZero cond target) =
-    PP.text "TKJumpIfZero(" <> pretty cond <> PP.text ", " <> pretty target <> PP.text ")"
-  pretty (TKJumpIfNotZero cond target) =
-    PP.text "TKJumpIfNotZero(" <> pretty cond <> PP.text ", " <> pretty target <> PP.text ")"
-  pretty (TKLabel label) =
-    PP.text "TKLabel(" <> pretty label <> PP.text ")"
+        PP.text "Binary(" <> pretty op <> PP.text ", " <> pretty src1 <> PP.text ", " <> pretty src2 <> PP.text ", " <> pretty dst <> PP.text ")"
+      else PP.text "Binary(" PP.$$ PP.nest 2 (pretty op) <> PP.text ", " PP.$$ PP.nest 2 (pretty src1) PP.$$ PP.nest 2 (pretty src2) <> PP.text ", " PP.$$ PP.nest 2 (pretty dst) PP.$$ PP.text ")"
+  pretty (Copy src dst) =
+    PP.text "Copy(" <> pretty src <> PP.text ", " <> pretty dst <> PP.text ")"
+  pretty (Jump target) =
+    PP.text "Jump(" <> pretty target <> PP.text ")"
+  pretty (JumpIfZero cond target) =
+    PP.text "JumpIfZero(" <> pretty cond <> PP.text ", " <> pretty target <> PP.text ")"
+  pretty (JumpIfNotZero cond target) =
+    PP.text "JumpIfNotZero(" <> pretty cond <> PP.text ", " <> pretty target <> PP.text ")"
+  pretty (Label label) =
+    PP.text "Label(" <> pretty label <> PP.text ")"
 
-instance Pretty TKVal where
-  pretty (TKConstant c) = PP.text "TKConstant " <> PP.text (show c)
-  pretty (TKVar i) = PP.text "TKVar " <> pretty i
+instance Pretty Val where
+  pretty (Constant c) = PP.text "Constant " <> PP.text (show c)
+  pretty (Var i) = PP.text "Var " <> pretty i
 
-instance Pretty TKUnaryOperator where
-  pretty TKComplement = PP.text "TKComplement"
-  pretty TKNegate = PP.text "TKNegate"
-  pretty TKNot = PP.text "TKNot"
+instance Pretty UnaryOperator where
+  pretty Complement = PP.text "Complement"
+  pretty Negate = PP.text "Negate"
+  pretty Not = PP.text "Not"
 
-instance Pretty TKBinaryOperator where
-  pretty TKAdd = PP.text "TKAdd"
-  pretty TKSubtract = PP.text "TKSubtract"
-  pretty TKMultiply = PP.text "TKMultiply"
-  pretty TKDivide = PP.text "TKDivide"
-  pretty TKRemainder = PP.text "TKRemainder"
-  pretty TKEqual = PP.text "TKEqual"
-  pretty TKNotEqual = PP.text "TKNotEqual"
-  pretty TKGreaterThan = PP.text "TKGreaterThan"
-  pretty TKGreaterOrEqual = PP.text "TKGreaterOrEqual"
-  pretty TKLessThan = PP.text "TKLessThan"
-  pretty TKLessOrEqual = PP.text "TKLessOrEqual"
+instance Pretty BinaryOperator where
+  pretty Add = PP.text "Add"
+  pretty Subtract = PP.text "Subtract"
+  pretty Multiply = PP.text "Multiply"
+  pretty Divide = PP.text "Divide"
+  pretty Remainder = PP.text "Remainder"
+  pretty Equal = PP.text "Equal"
+  pretty NotEqual = PP.text "NotEqual"
+  pretty GreaterThan = PP.text "GreaterThan"
+  pretty GreaterOrEqual = PP.text "GreaterOrEqual"
+  pretty LessThan = PP.text "LessThan"
+  pretty LessOrEqual = PP.text "LessOrEqual"
 
 -- * TAKCY Generation
 
@@ -192,7 +192,7 @@ instance Pretty TKBinaryOperator where
 
 data TACKYGenState = TACKYGenState
   { tempVarCounter :: Int,
-    currentInstructions :: [TKInstruction]
+    currentInstructions :: [Instruction]
   }
 
 initTACKYGenState :: TACKYGenState
@@ -200,29 +200,29 @@ initTACKYGenState = TACKYGenState 0 []
 
 type TACKYGen = State TACKYGenState
 
-appendInst :: TKInstruction -> TACKYGen ()
+appendInst :: Instruction -> TACKYGen ()
 appendInst i = do
   TACKYGenState counter is <- get
   put (TACKYGenState counter (is <> [i]))
 
-appendInsts :: [TKInstruction] -> TACKYGen ()
+appendInsts :: [Instruction] -> TACKYGen ()
 appendInsts instuctions = do
   TACKYGenState counter is <- get
   put (TACKYGenState counter (is <> instuctions))
 
-makeTmp :: TACKYGen TKIdentifier
+makeTmp :: TACKYGen Identifier
 makeTmp = makeTmpWithName "tmp."
 
-makeTmpWithName :: String -> TACKYGen TKIdentifier
+makeTmpWithName :: String -> TACKYGen Identifier
 makeTmpWithName name = do
   i <- gets tempVarCounter
   instructions <- gets currentInstructions
   put (TACKYGenState (i + 1) instructions)
-  return (TKIdentifier (name <> show i))
+  return (Identifier (name <> show i))
 
-returnTACKY :: (TKVal, TACKYGenState) -> [TKInstruction]
+returnTACKY :: (Val, TACKYGenState) -> [Instruction]
 returnTACKY (val, TACKYGenState _ is) =
-  is <> [TKReturn val]
+  is <> [Return val]
 
 -- ** Generating TACKY
 
@@ -256,87 +256,87 @@ returnTACKY (val, TACKYGenState _ is) =
 -- binary_operator = Add | Subtract | Multiply | Divide | Remainder | Equal | NotEqual
 --                 | LessThan | LessOrEqual | GreaterThan | GreaterOrEqual
 
-genTKIdentifier :: Identifier -> TKIdentifier
-genTKIdentifier (Identifier i) = TKIdentifier i
+genIdentifier :: Parser.Identifier -> Identifier
+genIdentifier (Parser.Identifier i) = Identifier i
 
-genTKProgram :: Program -> TKProgram
-genTKProgram (Program funcDef) = TKProgram (genTKFuncDef funcDef)
+genProgram :: Parser.Program -> Program
+genProgram (Parser.Program funcDef) = Program (genFuncDef funcDef)
 
-genTKFuncDef :: FuncDef -> TKFuncDef
-genTKFuncDef (Function name body) = TKFunction (genTKIdentifier name) (genTKInstructions body)
+genFuncDef :: Parser.FuncDef -> FuncDef
+genFuncDef (Parser.Function name body) = Function (genIdentifier name) (genInstructions body)
 
-genTKInstructions :: Statement -> [TKInstruction]
-genTKInstructions (Return e) = returnTACKY (runState (emitTACKY e) initTACKYGenState)
+genInstructions :: Parser.Statement -> [Instruction]
+genInstructions (Parser.Return e) = returnTACKY (runState (emitTACKY e) initTACKYGenState)
 
-emitTACKY :: Exp -> TACKYGen TKVal
-emitTACKY (Constant c) =
-  return (TKConstant c)
-emitTACKY (Unary op inner) = do
+emitTACKY :: Parser.Exp -> TACKYGen Val
+emitTACKY (Parser.Constant c) =
+  return (Constant c)
+emitTACKY (Parser.Unary op inner) = do
   src <- emitTACKY inner
   dstName <- makeTmp
-  let dst = TKVar dstName
-      tackyOp = genTKUnaryOperator op
-  appendInst (TKUnary tackyOp src dst)
+  let dst = Var dstName
+      tackyOp = genUnaryOperator op
+  appendInst (Unary tackyOp src dst)
   return dst
-emitTACKY (Binary And e1 e2) = do
+emitTACKY (Parser.Binary Parser.And e1 e2) = do
   v1 <- emitTACKY e1
   falseLabel <- makeTmpWithName "and_false"
   endLabel <- makeTmpWithName "and_end"
-  appendInst (TKJumpIfZero v1 falseLabel)
+  appendInst (JumpIfZero v1 falseLabel)
   v2 <- emitTACKY e2
-  appendInst (TKJumpIfZero v2 falseLabel)
+  appendInst (JumpIfZero v2 falseLabel)
   resName <- makeTmp
-  let res = TKVar resName
+  let res = Var resName
   appendInsts
-    [ TKCopy (TKConstant 1) res,
-      TKJump endLabel,
-      TKLabel falseLabel,
-      TKCopy (TKConstant 0) res,
-      TKLabel endLabel
+    [ Copy (Constant 1) res,
+      Jump endLabel,
+      Label falseLabel,
+      Copy (Constant 0) res,
+      Label endLabel
     ]
   return res
-emitTACKY (Binary Or e1 e2) = do
+emitTACKY (Parser.Binary Parser.Or e1 e2) = do
   v1 <- emitTACKY e1
   trueLabel <- makeTmpWithName "or_true"
   endLabel <- makeTmpWithName "or_end"
-  appendInst (TKJumpIfNotZero v1 trueLabel)
+  appendInst (JumpIfNotZero v1 trueLabel)
   v2 <- emitTACKY e2
-  appendInst (TKJumpIfNotZero v2 trueLabel)
+  appendInst (JumpIfNotZero v2 trueLabel)
   resName <- makeTmp
-  let res = TKVar resName
+  let res = Var resName
   appendInsts
-    [ TKCopy (TKConstant 0) res,
-      TKJump endLabel,
-      TKLabel trueLabel,
-      TKCopy (TKConstant 1) res,
-      TKLabel endLabel
+    [ Copy (Constant 0) res,
+      Jump endLabel,
+      Label trueLabel,
+      Copy (Constant 1) res,
+      Label endLabel
     ]
   return res
-emitTACKY (Binary op e1 e2) = do
+emitTACKY (Parser.Binary op e1 e2) = do
   v1 <- emitTACKY e1
   v2 <- emitTACKY e2
   dstName <- makeTmp
-  let dst = TKVar dstName
-      tackyOp = genTKBinaryOperator op
-  appendInst (TKBinary tackyOp v1 v2 dst)
+  let dst = Var dstName
+      tackyOp = genBinaryOperator op
+  appendInst (Binary tackyOp v1 v2 dst)
   return dst
 
-genTKUnaryOperator :: UnaryOperator -> TKUnaryOperator
-genTKUnaryOperator Complement = TKComplement
-genTKUnaryOperator Negate = TKNegate
-genTKUnaryOperator Not = TKNot
+genUnaryOperator :: Parser.UnaryOperator -> UnaryOperator
+genUnaryOperator Parser.Complement = Complement
+genUnaryOperator Parser.Negate = Negate
+genUnaryOperator Parser.Not = Not
 
-genTKBinaryOperator :: BinaryOperator -> TKBinaryOperator
-genTKBinaryOperator Add = TKAdd
-genTKBinaryOperator Subtract = TKSubtract
-genTKBinaryOperator Multiply = TKMultiply
-genTKBinaryOperator Divide = TKDivide
-genTKBinaryOperator Remainder = TKRemainder
-genTKBinaryOperator Equal = TKEqual
-genTKBinaryOperator NotEqual = TKNotEqual
-genTKBinaryOperator GreaterThan = TKGreaterThan
-genTKBinaryOperator GreaterOrEqual = TKGreaterOrEqual
-genTKBinaryOperator LessThan = TKLessThan
-genTKBinaryOperator LessOrEqual = TKLessOrEqual
-genTKBinaryOperator And = error "genTKBinaryOperator: shouldnt convert And"
-genTKBinaryOperator Or = error "genTKBinaryOperator: shouldnt convert Or"
+genBinaryOperator :: Parser.BinaryOperator -> BinaryOperator
+genBinaryOperator Parser.Add = Add
+genBinaryOperator Parser.Subtract = Subtract
+genBinaryOperator Parser.Multiply = Multiply
+genBinaryOperator Parser.Divide = Divide
+genBinaryOperator Parser.Remainder = Remainder
+genBinaryOperator Parser.Equal = Equal
+genBinaryOperator Parser.NotEqual = NotEqual
+genBinaryOperator Parser.GreaterThan = GreaterThan
+genBinaryOperator Parser.GreaterOrEqual = GreaterOrEqual
+genBinaryOperator Parser.LessThan = LessThan
+genBinaryOperator Parser.LessOrEqual = LessOrEqual
+genBinaryOperator Parser.And = error "genBinaryOperator: shouldnt convert And"
+genBinaryOperator Parser.Or = error "genBinaryOperator: shouldnt convert Or"
