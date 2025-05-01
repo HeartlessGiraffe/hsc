@@ -7,6 +7,7 @@ module AssemblyGen.AssemblyGen
     FuncDef (..),
     Identifier (..),
     Instruction (..),
+    Instructions,
     UnaryOperator (..),
     BinaryOperator (..),
     Operand (..),
@@ -31,6 +32,8 @@ import qualified Data.Map as M
 import qualified TACKY.TACKY as TACKY
 import qualified Text.PrettyPrint as PP
 import Utils (Pretty (..))
+import qualified Data.Sequence as Seq
+import Data.Foldable (Foldable(..))
 
 -- * Assembly represented By ADT
 
@@ -61,9 +64,17 @@ data Program = Program FuncDef
 
 data FuncDef = Function
   { _aFuncName :: Identifier,
-    _aFuncInstructions :: [Instruction]
+    _aFuncInstructions :: Instructions
   }
   deriving (Show, Eq)
+
+type Instructions = Seq.Seq Instruction
+
+fromInstructionList :: [Instruction] -> Instructions
+fromInstructionList = Seq.fromList
+
+leftAppendInstruction :: Instruction -> Instructions -> Instructions
+leftAppendInstruction i is = i Seq.<| is 
 
 newtype Identifier = Identifier
   { unIdentifier :: String
@@ -111,7 +122,7 @@ instance Pretty Program where
 
 instance Pretty FuncDef where
   pretty (Function name instructions) =
-    PP.text "Function {" PP.$$ PP.nest 2 (pretty name) PP.$$ PP.nest 2 (PP.vcat (map pretty instructions)) PP.$$ PP.text "}"
+    PP.text "Function {" PP.$$ PP.nest 2 (pretty name) PP.$$ PP.nest 2 (PP.vcat (toList (fmap pretty instructions))) PP.$$ PP.text "}"
 
 instance Pretty Identifier where
   pretty (Identifier name) = PP.text name
@@ -201,7 +212,7 @@ convertProgram (TACKY.Program funcDef) = Program (convertFunction funcDef)
 
 convertFunction :: TACKY.FuncDef -> FuncDef
 convertFunction (TACKY.Function name instuctions) =
-  Function (convertIdentifier name) (concatMap convertInstruction instuctions)
+  Function (convertIdentifier name) (fromInstructionList $ concatMap convertInstruction instuctions)
 
 convertInstruction :: TACKY.Instruction -> [Instruction]
 convertInstruction (TACKY.Return val) =
@@ -360,8 +371,8 @@ convertProgramWithReplacePseudoRegs tkP =
 convertProgramWithFixedInstructions :: TACKY.Program -> Program
 convertProgramWithFixedInstructions tkProgram =
   let (offset, Program (Function name instructions)) = convertProgramWithReplacePseudoRegs tkProgram
-      instructions' = allocateStack offset : instructions
-   in Program (Function name (fixInstructions instructions'))
+      instructions' = leftAppendInstruction (allocateStack offset) instructions
+   in Program (Function name (fromInstructionList $ fixInstructions instructions'))
 
 -- ** insert allocateStack
 

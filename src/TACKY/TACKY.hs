@@ -34,6 +34,8 @@ import Control.Monad.State
 import qualified Parser.Parser as Parser
 import qualified Text.PrettyPrint as PP
 import Utils (Pretty (..))
+import qualified Data.Sequence as Seq
+import Data.Foldable (Foldable(..))
 
 -- * TACKY AST
 
@@ -62,9 +64,23 @@ data Program = Program FuncDef deriving (Show, Eq)
 
 data FuncDef = Function
   { _funcName :: Identifier,
-    _funcBody :: [Instruction]
+    _funcBody :: Instructions
   }
   deriving (Show, Eq)
+
+type Instructions = Seq.Seq Instruction
+
+appendInstruction :: Instructions -> Instruction -> Instructions
+appendInstruction instructions i = instructions Seq.|> i
+
+concatInstructions :: Instructions -> Instructions -> Instructions
+concatInstructions is1 is2 = is1 Seq.>< is2
+
+emptyInstruction :: Instructions
+emptyInstruction = Seq.empty
+
+fromInstructionList :: [Instruction] -> Instructions
+fromInstructionList = Seq.fromList
 
 data Instruction
   = Return Val
@@ -141,7 +157,7 @@ instance Pretty Program where
 
 instance Pretty FuncDef where
   pretty (Function name body) =
-    PP.text "Function (" <> pretty name <> PP.text ") {" PP.$$ PP.nest 2 (PP.sep (pretty <$> body)) PP.$$ PP.text "}"
+    PP.text "Function (" <> pretty name <> PP.text ") {" PP.$$ PP.nest 2 (PP.sep $ toList (pretty <$> body)) PP.$$ PP.text "}"
 
 instance Pretty Instruction where
   pretty (Return expr) =
@@ -192,23 +208,23 @@ instance Pretty BinaryOperator where
 
 data TACKYGenState = TACKYGenState
   { tempVarCounter :: Int,
-    currentInstructions :: [Instruction]
+    currentInstructions :: Instructions
   }
 
 initTACKYGenState :: TACKYGenState
-initTACKYGenState = TACKYGenState 0 []
+initTACKYGenState = TACKYGenState 0 emptyInstruction
 
 type TACKYGen = State TACKYGenState
 
 appendInst :: Instruction -> TACKYGen ()
 appendInst i = do
   TACKYGenState counter is <- get
-  put (TACKYGenState counter (is <> [i]))
+  put (TACKYGenState counter (appendInstruction is i))
 
 appendInsts :: [Instruction] -> TACKYGen ()
 appendInsts instuctions = do
   TACKYGenState counter is <- get
-  put (TACKYGenState counter (is <> instuctions))
+  put (TACKYGenState counter (concatInstructions is (fromInstructionList instuctions)))
 
 makeTmp :: TACKYGen Identifier
 makeTmp = makeTmpWithName "tmp."
@@ -220,9 +236,9 @@ makeTmpWithName name = do
   put (TACKYGenState (i + 1) instructions)
   return (Identifier (name <> show i))
 
-returnTACKY :: (Val, TACKYGenState) -> [Instruction]
+returnTACKY :: (Val, TACKYGenState) -> Instructions
 returnTACKY (val, TACKYGenState _ is) =
-  is <> [Return val]
+  appendInstruction is (Return val)
 
 -- ** Generating TACKY
 
@@ -265,7 +281,7 @@ genProgram (Parser.Program funcDef) = Program (genFuncDef funcDef)
 genFuncDef :: Parser.FuncDef -> FuncDef
 genFuncDef (Parser.Function name body) = Function (genIdentifier name) (genInstructions body)
 
-genInstructions :: Parser.Statement -> [Instruction]
+genInstructions :: Parser.Statement -> Instructions
 genInstructions (Parser.Return e) = returnTACKY (runState (emitTACKY e) initTACKYGenState)
 
 emitTACKY :: Parser.Exp -> TACKYGen Val

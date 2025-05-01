@@ -32,7 +32,7 @@ constructFunction (AG.Function name instuctions) =
     ++ "movq %rsp, %rbp\n"
     ++ constructInstructions instuctions
 
-constructInstructions :: [AG.Instruction] -> String
+constructInstructions :: AG.Instructions -> String
 constructInstructions is =
   concat a
   where
