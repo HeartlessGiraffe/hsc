@@ -28,17 +28,35 @@ instance Pretty Parser.Program where
   pretty (Parser.Program funcDef) =
     PP.text "Program {" PP.$$ PP.nest 2 (pretty funcDef) PP.$$ PP.text "}"
 
+instance Pretty Parser.BlockItem where 
+  pretty (Parser.S s) = 
+    PP.text "S (" PP.$$ pretty s PP.$$ PP.text ")"
+  pretty (Parser.D d) = 
+    PP.text "D (" PP.$$ pretty d PP.$$ PP.text ")"
+
+instance Pretty Parser.Declaration where 
+  pretty (Parser.Declaration i mE) = 
+    case mE of 
+      Nothing -> pretty i
+      Just e -> pretty i PP.$$ pretty e
+
 instance Pretty Parser.FuncDef where
   pretty (Parser.Function name body) =
-    PP.text "Function (" <> pretty name <> PP.text ") {" PP.$$ PP.nest 2 (pretty body) PP.$$ PP.text "}"
+    PP.text "Function (" <> pretty name <> PP.text ") {" PP.$$ PP.nest 2 (PP.sep $ pretty <$> body) PP.$$ PP.text "}"
 
 instance Pretty Parser.Statement where
   pretty (Parser.Return expr) =
     PP.text "Return (" <> pretty expr <> PP.text ")"
+  pretty (Parser.Expression expr) =
+    PP.text "Expression (" <> pretty expr <> PP.text ")"
+  pretty Parser.Null =
+    PP.text "Null"
 
 instance Pretty Parser.Exp where
   pretty (Parser.Constant value) =
     PP.text "Constant(" <> PP.int value <> PP.text ")"
+  pretty (Parser.Var i) =
+    PP.text "Var(" <> pretty i <> PP.text ")"
   pretty (Parser.Unary uOp e) =
     PP.text "Unary(" <> pretty uOp <> PP.text ", " <> pretty e <> PP.text ")"
   pretty (Parser.Binary bOp e1 e2) =
@@ -46,6 +64,8 @@ instance Pretty Parser.Exp where
       then
         PP.text "Binary(" <> pretty bOp <> PP.text ", " <> pretty e1 <> PP.text ", " <> pretty e2 <> PP.text ")"
       else PP.text "Binary(" PP.$$ PP.nest 2 (pretty bOp) <> PP.text ", " PP.$$ PP.nest 2 (pretty e1) <> PP.text ", " PP.$$ PP.nest 2 (pretty e2) PP.$$ PP.text ")"
+  pretty (Parser.Assignment e1 e2) =
+    PP.text "Assignment(" <> pretty e1 <> PP.text ", " <> pretty e2 <> PP.text ")"
 
 instance Pretty Parser.UnaryOperator where
   pretty Parser.Complement = PP.text "Complement"

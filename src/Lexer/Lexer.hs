@@ -101,6 +101,8 @@ data Token
     TLE
   | -- | 大于等于
     TGE
+  | -- | 赋值
+    Assign
   deriving (Show, Eq)
 
 -- | Tokens
@@ -245,6 +247,10 @@ leRegex = "<="
 geRegex :: TokenRegex
 geRegex = ">="
 
+-- | 赋值
+assignRegex :: TokenRegex 
+assignRegex = "="
+
 -- | token的正则表达式
 tokenRegexes :: [(TokenRegex, Token)]
 tokenRegexes =
@@ -275,7 +281,8 @@ tokenRegexes =
           (ltRegex, TLT),
           (gtRegex, TGT),
           (leRegex, TLE),
-          (geRegex, TGE)
+          (geRegex, TGE),
+          (assignRegex, Assign)
         ]
 
 -- | Token是二元表达式
@@ -294,6 +301,7 @@ isTBinary TLT = True
 isTBinary TGT = True
 isTBinary TLE = True
 isTBinary TGE = True
+isTBinary Assign = True
 isTBinary _ = False
 
 -- | 优先级
@@ -318,6 +326,7 @@ precedence TEQ = 30
 precedence TNE = 30
 precedence And = 10
 precedence Or = 5
+precedence Assign = 1
 precedence _ = -1
 
 -- | Token是二元操作符
@@ -362,6 +371,7 @@ lenToken TGT = 1
 lenToken TLT = 1
 lenToken TGE = 2
 lenToken TLE = 2
+lenToken Assign = 1
 
 -- | 如果标识符是关键字, 则将其视为关键字
 identifierToKeyword :: Token -> Token

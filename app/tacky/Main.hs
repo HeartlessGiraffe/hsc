@@ -2,9 +2,10 @@ module Main (main) where
 
 import Lexer.Lexer (lexer)
 import Parser.Parser (evalParse)
-import TACKY.TACKY (genProgram)
+import SemanticAnalysis.VariableResolution
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
+import TACKY.TACKY (genProgram)
 import Utils.Pretty (prettyPrint)
 
 main :: IO ()
@@ -15,7 +16,11 @@ main = do
       content <- readFile filePath
       case lexer content of
         Right tokens -> case evalParse tokens of
-          Right ast -> putStrLn $ prettyPrint (genProgram ast)
+          Right ast' -> case resolveProgram ast' of
+            Right ast -> putStrLn $ prettyPrint (genProgram ast)
+            Left err -> do
+              print err
+              exitFailure
           Left err -> do
             print err
             exitFailure

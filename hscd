@@ -5,7 +5,7 @@ import subprocess
 
 def main():
     if len(sys.argv) < 2 or len(sys.argv) > 3:
-        print("Usage: hscd <file_path> [--lex] [--parse] [--codegen] [--tacky]")
+        print("Usage: hscd <file_path> [--lex] [--parse] [--codegen] [--tacky] [--validate]")
         sys.exit(1)
 
     # Parse arguments
@@ -14,6 +14,7 @@ def main():
     use_parser = False
     use_codegen = False
     use_tacky = False
+    use_validate = False
 
     for arg in sys.argv[1:]:
         if arg == "--lex":
@@ -24,12 +25,14 @@ def main():
             use_codegen = True
         elif arg == "--tacky":
             use_tacky = True
+        elif arg == "--validate":
+            use_validate = True
         else:
             file_path = arg
 
     # Ensure only one of [--lex], [--parse], [--codegen] [--tacky] is enabled
-    if sum([use_lexer, use_parser, use_codegen, use_tacky]) > 1:
-        print("Error: Only one of [--lex], [--parse], [--codegen] or [--tacky] can be enabled at a time.")
+    if sum([use_lexer, use_parser, use_codegen, use_tacky, use_validate]) > 1:
+        print("Error: Only one of [--lex], [--parse], [--codegen], [--tacky] or [--validate] can be enabled at a time.")
         sys.exit(1)
 
     if not file_path:
@@ -73,6 +76,18 @@ def main():
         os.remove(preprocessed_file)
         sys.exit(0)
 
+    # If --parse is provided, process with hsc-semAnalyzer and exit
+    if use_validate:
+        try:
+            subprocess.run(["hsc-semAnalyzer", preprocessed_file], check=True)
+            print(f"Validating successful using hsc-semAnalyzer on: {preprocessed_file}")
+        except subprocess.CalledProcessError:
+            print("Error: Validating failed.")
+            os.remove(preprocessed_file)
+            sys.exit(1)
+        os.remove(preprocessed_file)
+        sys.exit(0)
+        
     # If --tacky is provided, process with hsc-codegenerator and exit
     if use_tacky:
         try:

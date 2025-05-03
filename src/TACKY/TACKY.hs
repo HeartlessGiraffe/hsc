@@ -32,9 +32,9 @@ module TACKY.TACKY
 where
 
 import Control.Monad.State
-import qualified Parser.Parser as Parser
+import Data.Foldable (traverse_)
 import qualified Data.Sequence as Seq
-
+import qualified Parser.Parser as Parser
 
 -- * TACKY AST
 
@@ -179,10 +179,6 @@ makeTmpWithName name = do
   put (TACKYGenState (i + 1) instructions)
   return (Identifier (name <> show i))
 
-returnTACKY :: (Val, TACKYGenState) -> Instructions
-returnTACKY (val, TACKYGenState _ is) =
-  appendInstruction is (Return val)
-
 -- ** Generating TACKY
 
 -- from:
@@ -219,13 +215,43 @@ genIdentifier :: Parser.Identifier -> Identifier
 genIdentifier (Parser.Identifier i) = Identifier i
 
 genProgram :: Parser.Program -> Program
-genProgram (Parser.Program funcDef) = Program (genFuncDef funcDef)
+genProgram (Parser.Program funcDef) =
+  let fd = evalState (genFuncDef funcDef) initTACKYGenState
+   in Program fd
 
-genFuncDef :: Parser.FuncDef -> FuncDef
-genFuncDef (Parser.Function name body) = Function (genIdentifier name) (genInstructions body)
+genFuncDef :: Parser.FuncDef -> TACKYGen FuncDef
+genFuncDef (Parser.Function name body) = do
+  genBlockItemsInstructions body
+  TACKYGenState _ is <- get
+  let is' = appendInstruction is (Return (Constant 0))
+  return $ Function (genIdentifier name) is'
 
-genInstructions :: Parser.Statement -> Instructions
-genInstructions (Parser.Return e) = returnTACKY (runState (emitTACKY e) initTACKYGenState)
+genBlockItemsInstructions ::
+  (Traversable t) =>
+  t Parser.BlockItem ->
+  TACKYGen ()
+genBlockItemsInstructions bis = do
+  traverse_ genBlockItemInstructions bis
+
+genBlockItemInstructions :: Parser.BlockItem -> TACKYGen ()
+genBlockItemInstructions (Parser.S s) = genSInstructions s
+genBlockItemInstructions (Parser.D d) = genDInstructions d
+
+genDInstructions :: Parser.Declaration -> TACKYGen ()
+genDInstructions (Parser.Declaration name (Just e)) = do
+  val <- emitTACKY e
+  let var = Var (genIdentifier name)
+  appendInst (Copy val var)
+genDInstructions (Parser.Declaration _ Nothing) = return ()
+
+genSInstructions :: Parser.Statement -> TACKYGen ()
+genSInstructions (Parser.Return e) = do
+  val <- emitTACKY e
+  appendInst (Return val)
+genSInstructions (Parser.Expression e) = do
+  _ <- emitTACKY e
+  return ()
+genSInstructions Parser.Null = return ()
 
 emitTACKY :: Parser.Exp -> TACKYGen Val
 emitTACKY (Parser.Constant c) =
@@ -279,6 +305,14 @@ emitTACKY (Parser.Binary op e1 e2) = do
       tackyOp = genBinaryOperator op
   appendInst (Binary tackyOp v1 v2 dst)
   return dst
+emitTACKY (Parser.Var v) = return $ Var (genIdentifier v)
+emitTACKY (Parser.Assignment (Parser.Var v) rhs) = do
+  result <- emitTACKY rhs
+  let var' = Var (genIdentifier v)
+  appendInst (Copy result var')
+  return var'
+emitTACKY (Parser.Assignment lhs _) =
+  error $ "emitTACKY: lhs" ++ show lhs ++ " is not a variable !? It should have been resolved!"
 
 genUnaryOperator :: Parser.UnaryOperator -> UnaryOperator
 genUnaryOperator Parser.Complement = Complement

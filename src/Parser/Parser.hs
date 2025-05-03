@@ -5,16 +5,19 @@ module Parser.Parser
   ( -- * AST
     Identifier (..),
     Program (..),
+    BlockItem (..),
+    Declaration (..),
     FuncDef (..),
     Statement (..),
     Exp (..),
     isConstant,
+    notVar,
     UnaryOperator (..),
     BinaryOperator (..),
 
     -- * Parsers
     Expect,
-    ExpectError (..),
+    ParseError (..),
     Parser,
     evalParse,
     parseProgram,
@@ -39,11 +42,15 @@ import qualified Lexer.Lexer as Lexer
 
 --
 -- program = Program(function_definition)
--- function_definition = Function(identifier name, statement body)
--- statement = Return(exp)
+-- function_definition = Function(identifier name, block_item* body)
+-- block_item = S(statement) | D(declaration)
+-- declaration = Declaration(identifier name, exp? init)
+-- statement = Return(exp) | Expression(exp) | Null
 -- exp = Constant(int)
+--     | Var(identifier)
 --     | Unary(unary_operator, exp)
 --     | Binary(binary_operator, exp, exp)
+--     | Assignment(exp, exp)
 -- unary_operator = Complement | Negate | Not
 -- binary_operator = Add | Subtract | Multiply | Divide | Remainder | And | Or
 --                 | Equal | NotEqual | LessThan | LessOrEqual
@@ -52,29 +59,47 @@ import qualified Lexer.Lexer as Lexer
 newtype Identifier = Identifier
   { unIdenityfier :: String
   }
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 data Program = Program FuncDef
   deriving (Show, Eq)
 
 data FuncDef = Function
   { _funcName :: Identifier,
-    _funcBody :: Statement
+    _funcBody :: [BlockItem]
   }
   deriving (Show, Eq)
 
-data Statement = Return Exp
+data BlockItem = S Statement | D Declaration
+  deriving (Show, Eq)
+
+data Declaration = Declaration
+  { _name :: Identifier,
+    _init :: Maybe Exp
+  }
+  deriving (Show, Eq)
+
+data Statement
+  = Return Exp
+  | Expression Exp
+  | Null
   deriving (Show, Eq)
 
 data Exp
   = Constant Int
+  | Var Identifier
   | Unary UnaryOperator Exp
   | Binary BinaryOperator Exp Exp
+  | Assignment Exp Exp
   deriving (Show, Eq)
 
 isConstant :: Exp -> Bool
 isConstant (Constant _) = True
 isConstant _ = False
+
+notVar :: Exp -> Bool 
+notVar (Var _) = False 
+notVar _ = True
 
 data UnaryOperator = Complement | Negate | Not
   deriving (Show, Eq)
@@ -97,34 +122,43 @@ data BinaryOperator
 
 -- ** Pretty
 
-
 -- * Parsers
 
 -- <program> ::= <function>
--- <function> ::= "int" <identifier> "(" "void" ")" "{" <statement> "}"
--- <statement> ::= "return" <exp> ";"
+-- <function> ::= "int" <identifier> "(" "void" ")" "{" { <block-item> } "}"
+-- <block-item> ::= <statement> | <declaration>
+-- <declaration> ::= "int" <identifier> [ "=" <exp> ] ";"
+-- <statement> ::= "return" <exp> ";" | <exp> ";" | ";"
 -- <exp> ::= <factor> | <exp> <binop> <exp>
--- <factor> ::= <int> | <unop> <factor> | "(" <exp> ")"
+-- <factor> ::= <int> | <identifier> | <unop> <factor> | "(" <exp> ")"
 -- <unop> ::= "-" | "~" | "!"
 -- <binop> ::= "-" | "+" | "*" | "/" | "%" | "&&" | "||"
---         | "==" | "!=" | "<" | "<=" | ">" | ">="
+--           | "==" | "!=" | "<" | "<=" | ">" | ">=" | "="
 -- <identifier> ::= ? An identifier token ?
 -- <int> ::= ? A constant token ?
 
-data ExpectError = ExpectError
-  { expected :: Lexer.Tokens,
+data ParseError = ParseError
+  { message :: String, 
+    expected :: Expecting,
     found :: Maybe Lexer.Token
   }
   deriving (Show)
 
-throwExpectError :: Lexer.Tokens -> Maybe Lexer.Token -> Parser a
-throwExpectError expecting meet =
-  throwError $ ExpectError expecting meet
+data Expecting = Something | Tokens Lexer.Tokens
+  deriving (Show)
+
+throwExpectTokensError :: String -> Lexer.Tokens -> Maybe Lexer.Token -> Parser a
+throwExpectTokensError msg expecting meet =
+  throwError $ ParseError msg (Tokens expecting) meet
+
+throwExpectSomethingError :: String -> Parser a
+throwExpectSomethingError msg = 
+  throwError $ ParseError msg Something Nothing
 
 nothingExpected :: Lexer.Tokens
 nothingExpected = Lexer.emptyToken
 
-type Expect = Either ExpectError
+type Expect = Either ParseError
 
 type Parser a = StateT Lexer.Tokens Expect a
 
@@ -135,8 +169,8 @@ expect expectedToken = do
     Just foundToken -> do
       if expectedToken == foundToken
         then takeToken
-        else throwExpectError (Lexer.singleToken expectedToken) (Just foundToken)
-    Nothing -> throwExpectError (Lexer.singleToken expectedToken) Nothing
+        else throwExpectTokensError "expect" (Lexer.singleToken expectedToken) (Just foundToken)
+    Nothing -> throwExpectTokensError "expect" (Lexer.singleToken expectedToken) Nothing
 
 peek :: Parser (Maybe Lexer.Token)
 peek = do
@@ -160,7 +194,7 @@ parseProgram = do
   nextToken <- peek
   case nextToken of
     Nothing -> return (Program program)
-    others -> throwExpectError nothingExpected others
+    others -> throwExpectTokensError "parseProgram" nothingExpected others
 
 -- | Parse a function definition
 --
@@ -173,19 +207,63 @@ parseFuncDef = do
   expect Lexer.VoidKeyword
   expect Lexer.RightParen
   expect Lexer.LeftBrace
-  body <- parseStatement
+  body <- loop []
   expect Lexer.RightBrace
   return (Function functionName body)
+  where
+    loop :: [BlockItem] -> Parser [BlockItem]
+    loop functionBody = do
+      nextToken <- peek
+      case nextToken of
+        Just Lexer.RightBrace -> return functionBody
+        _ -> do
+          nextBlockItem <- parseBlockItem
+          loop (functionBody <> [nextBlockItem])
+
+parseBlockItem :: Parser BlockItem
+parseBlockItem = do
+  nextToken <- peek
+  case nextToken of
+    Just Lexer.IntKeyword -> D <$> parseDeclaration
+    _ -> S <$> parseStatement
+
+parseDeclaration :: Parser Declaration
+parseDeclaration = do
+  expect Lexer.IntKeyword
+  lvalue <- parseIdentifier
+  nextToken <- peek
+  case nextToken of
+    Just Lexer.Assign -> do
+      takeToken
+      expression <- parseExp Lexer.minimumPrecedence
+      expect Lexer.Semicolon
+      return (Declaration lvalue (Just expression))
+    Just Lexer.Semicolon -> do
+      takeToken
+      return (Declaration lvalue Nothing)
+    others -> throwExpectTokensError "parseDeclaration" (Lexer.tokensFromList [Lexer.Assign, Lexer.Semicolon]) others
 
 -- | Parse a statement
 --
 -- <statement> ::= "return" <exp> ";"
 parseStatement :: Parser Statement
 parseStatement = do
-  expect Lexer.ReturnKeyword
-  returnVal <- parseExp Lexer.minimumPrecedence
-  expect Lexer.Semicolon
-  return (Return returnVal)
+  nextToken <- peek
+  case nextToken of
+    Just Lexer.ReturnKeyword -> do
+      takeToken
+      returnVal <- parseExp Lexer.minimumPrecedence
+      expect Lexer.Semicolon
+      return (Return returnVal)
+    Just Lexer.Semicolon -> do
+      takeToken
+      return Null
+    Just _ -> do
+      expression <- parseExp Lexer.minimumPrecedence
+      expect Lexer.Semicolon
+      return (Expression expression)
+    Nothing -> throwExpectSomethingError "parseStatement"
+    
 
 -- | Parse a expression
 --
@@ -195,9 +273,15 @@ parseExp p =
   let loop _left _nextToken =
         if Lexer.mTIsBinary _nextToken && Lexer.mTPrecedenceGEt p _nextToken
           then do
-            operator <- parseBinop
-            right <- parseExp (Lexer.precedence (fromJust _nextToken) + 1)
-            let nleft = Binary operator _left right
+            nleft <- case _nextToken of
+              Just Lexer.Assign -> do
+                takeToken
+                right <- parseExp (Lexer.precedence (fromJust _nextToken))
+                return $ Assignment _left right
+              _ -> do
+                operator <- parseBinop
+                right <- parseExp (Lexer.precedence (fromJust _nextToken) + 1)
+                return $ Binary operator _left right
             nextT <- peek
             loop nleft nextT
           else
@@ -215,6 +299,7 @@ parseFactor = do
   nextToken <- peek
   case nextToken of
     Just (Lexer.Constant _) -> Constant <$> parseInt
+    Just (Lexer.Identifier _) -> Var <$> parseIdentifier
     Just Lexer.BitwiseComple -> do
       operator <- parseUnop
       Unary operator <$> parseFactor
@@ -230,7 +315,8 @@ parseFactor = do
       expect Lexer.RightParen
       return innerExp
     others ->
-      throwExpectError (Lexer.tokensFromList [Lexer.Constant 0, Lexer.BitwiseComple, Lexer.Neg, Lexer.Not, Lexer.LeftParen]) others
+      throwExpectTokensError "parseFactor" 
+      (Lexer.tokensFromList [Lexer.Constant 0, Lexer.Identifier "", Lexer.BitwiseComple, Lexer.Neg, Lexer.Not, Lexer.LeftParen]) others
 
 -- | Parse a unaryOperator
 --
@@ -249,7 +335,7 @@ parseUnop = do
       takeToken
       return Not
     others ->
-      throwExpectError (Lexer.tokensFromList [Lexer.BitwiseComple, Lexer.Neg, Lexer.Not]) others
+      throwExpectTokensError "parseUnop" (Lexer.tokensFromList [Lexer.BitwiseComple, Lexer.Neg, Lexer.Not]) others
 
 -- | Parse a bineryOperator
 --
@@ -299,7 +385,10 @@ parseBinop = do
       takeToken
       return GreaterOrEqual
     others ->
-      throwExpectError (Lexer.tokensFromList [Lexer.Neg, Lexer.Plus, Lexer.Mul, Lexer.Div, Lexer.Rem, Lexer.And, Lexer.Or, Lexer.TEQ, Lexer.TNE, Lexer.TLT, Lexer.TGT, Lexer.TLE, Lexer.TGE]) others
+      throwExpectTokensError "parseBinop" 
+      (Lexer.tokensFromList 
+      [Lexer.Neg, Lexer.Plus, Lexer.Mul, Lexer.Div, Lexer.Rem, Lexer.And, Lexer.Or, Lexer.TEQ, Lexer.TNE, Lexer.TLT, Lexer.TGT, Lexer.TLE, Lexer.TGE]) 
+      others
 
 -- | Parse an identifier
 --
@@ -312,7 +401,7 @@ parseIdentifier = do
       takeToken
       return (Identifier i)
     others ->
-      throwExpectError (Lexer.tokensFromList [Lexer.Identifier ""]) others
+      throwExpectTokensError "parseIdentifier" (Lexer.tokensFromList [Lexer.Identifier ""]) others
 
 -- | Parse an integer
 --
@@ -325,4 +414,4 @@ parseInt = do
       takeToken
       return i
     others ->
-      throwExpectError (Lexer.tokensFromList [Lexer.Constant 0]) others
+      throwExpectTokensError "parseInt" (Lexer.tokensFromList [Lexer.Constant 0]) others
