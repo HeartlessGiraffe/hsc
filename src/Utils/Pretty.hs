@@ -42,7 +42,7 @@ instance Pretty Parser.Declaration where
 
 instance Pretty Parser.FuncDef where
   pretty (Parser.Function name body) =
-    PP.text "Function (" <> pretty name <> PP.text ") {" PP.$$ PP.nest 2 (PP.sep $ pretty <$> body) PP.$$ PP.text "}"
+    PP.text "Function (" <> pretty name <> PP.text ") {" PP.$$ PP.nest 2 (PP.sep . toList $ pretty <$> body) PP.$$ PP.text "}"
 
 instance Pretty Parser.Statement where
   pretty (Parser.Return expr) =

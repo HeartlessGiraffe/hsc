@@ -103,7 +103,7 @@ data Token
     TGE
   | -- | 赋值
     Assign
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 -- | Tokens
 type Tokens = Seq.Seq Token

@@ -33,8 +33,10 @@ where
 
 import Control.Monad.Except
 import Control.Monad.State
+import qualified Data.Map as M
 import Data.Maybe (fromJust)
 import qualified Lexer.Lexer as Lexer
+import qualified Data.Sequence as Seq
 
 -- * SC AST
 
@@ -66,12 +68,20 @@ data Program = Program FuncDef
 
 data FuncDef = Function
   { _funcName :: Identifier,
-    _funcBody :: [BlockItem]
+    _funcBody :: BlockItems
   }
   deriving (Show, Eq)
 
 data BlockItem = S Statement | D Declaration
   deriving (Show, Eq)
+
+type BlockItems = Seq.Seq BlockItem
+
+blockItemsAppend :: BlockItems -> BlockItem -> BlockItems
+blockItemsAppend = (Seq.|>)
+
+emptyBlockItem :: BlockItems
+emptyBlockItem = Seq.empty
 
 data Declaration = Declaration
   { _name :: Identifier,
@@ -97,8 +107,8 @@ isConstant :: Exp -> Bool
 isConstant (Constant _) = True
 isConstant _ = False
 
-notVar :: Exp -> Bool 
-notVar (Var _) = False 
+notVar :: Exp -> Bool
+notVar (Var _) = False
 notVar _ = True
 
 data UnaryOperator = Complement | Negate | Not
@@ -138,7 +148,7 @@ data BinaryOperator
 -- <int> ::= ? A constant token ?
 
 data ParseError = ParseError
-  { message :: String, 
+  { message :: String,
     expected :: Expecting,
     found :: Maybe Lexer.Token
   }
@@ -152,7 +162,7 @@ throwExpectTokensError msg expecting meet =
   throwError $ ParseError msg (Tokens expecting) meet
 
 throwExpectSomethingError :: String -> Parser a
-throwExpectSomethingError msg = 
+throwExpectSomethingError msg =
   throwError $ ParseError msg Something Nothing
 
 nothingExpected :: Lexer.Tokens
@@ -207,18 +217,18 @@ parseFuncDef = do
   expect Lexer.VoidKeyword
   expect Lexer.RightParen
   expect Lexer.LeftBrace
-  body <- loop []
+  body <- loop emptyBlockItem
   expect Lexer.RightBrace
   return (Function functionName body)
   where
-    loop :: [BlockItem] -> Parser [BlockItem]
+    loop :: BlockItems -> Parser BlockItems
     loop functionBody = do
       nextToken <- peek
       case nextToken of
         Just Lexer.RightBrace -> return functionBody
         _ -> do
           nextBlockItem <- parseBlockItem
-          loop (functionBody <> [nextBlockItem])
+          loop (blockItemsAppend functionBody nextBlockItem)
 
 parseBlockItem :: Parser BlockItem
 parseBlockItem = do
@@ -263,7 +273,6 @@ parseStatement = do
       expect Lexer.Semicolon
       return (Expression expression)
     Nothing -> throwExpectSomethingError "parseStatement"
-    
 
 -- | Parse a expression
 --
@@ -315,8 +324,18 @@ parseFactor = do
       expect Lexer.RightParen
       return innerExp
     others ->
-      throwExpectTokensError "parseFactor" 
-      (Lexer.tokensFromList [Lexer.Constant 0, Lexer.Identifier "", Lexer.BitwiseComple, Lexer.Neg, Lexer.Not, Lexer.LeftParen]) others
+      throwExpectTokensError
+        "parseFactor"
+        (Lexer.tokensFromList [Lexer.Constant 0, Lexer.Identifier "", Lexer.BitwiseComple, Lexer.Neg, Lexer.Not, Lexer.LeftParen])
+        others
+
+unaryOperatorMap :: M.Map Lexer.Token UnaryOperator
+unaryOperatorMap =
+  M.fromList
+    [ (Lexer.BitwiseComple, Complement),
+      (Lexer.Neg, Negate),
+      (Lexer.Not, Not)
+    ]
 
 -- | Parse a unaryOperator
 --
@@ -324,71 +343,50 @@ parseFactor = do
 parseUnop :: Parser UnaryOperator
 parseUnop = do
   nextToken <- peek
-  case nextToken of
-    Just Lexer.BitwiseComple -> do
+  case nextToken >>= (`M.lookup` unaryOperatorMap) of
+    Just uop -> do
       takeToken
-      return Complement
-    Just Lexer.Neg -> do
-      takeToken
-      return Negate
-    Just Lexer.Not -> do
-      takeToken
-      return Not
-    others ->
-      throwExpectTokensError "parseUnop" (Lexer.tokensFromList [Lexer.BitwiseComple, Lexer.Neg, Lexer.Not]) others
+      return uop
+    _ ->
+      throwExpectTokensError
+        "parseUnop"
+        (Lexer.tokensFromList (M.keys unaryOperatorMap))
+        nextToken
 
--- | Parse a bineryOperator
+binaryOperatorMap :: M.Map Lexer.Token BinaryOperator
+binaryOperatorMap =
+  M.fromList
+    [ (Lexer.Neg, Subtract),
+      (Lexer.Plus, Add),
+      (Lexer.Mul, Multiply),
+      (Lexer.Div, Divide),
+      (Lexer.Rem, Remainder),
+      (Lexer.And, And),
+      (Lexer.Or, Or),
+      (Lexer.TEQ, Equal),
+      (Lexer.TNE, NotEqual),
+      (Lexer.TLT, LessThan),
+      (Lexer.TGT, GreaterThan),
+      (Lexer.TLE, LessOrEqual),
+      (Lexer.TGE, GreaterOrEqual)
+    ]
+
+-- | Parse a binaryOperator
 --
 -- <binop> ::= "-" | "+" | "*" | "/" | "%" | "&&" | "||"
 --         | "==" | "!=" | "<" | "<=" | ">" | ">="
 parseBinop :: Parser BinaryOperator
 parseBinop = do
   nextToken <- peek
-  case nextToken of
-    Just Lexer.Neg -> do
+  case nextToken >>= (`M.lookup` binaryOperatorMap) of
+    Just bop -> do
       takeToken
-      return Subtract
-    Just Lexer.Plus -> do
-      takeToken
-      return Add
-    Just Lexer.Mul -> do
-      takeToken
-      return Multiply
-    Just Lexer.Div -> do
-      takeToken
-      return Divide
-    Just Lexer.Rem -> do
-      takeToken
-      return Remainder
-    Just Lexer.And -> do
-      takeToken
-      return And
-    Just Lexer.Or -> do
-      takeToken
-      return Or
-    Just Lexer.TEQ -> do
-      takeToken
-      return Equal
-    Just Lexer.TNE -> do
-      takeToken
-      return NotEqual
-    Just Lexer.TLT -> do
-      takeToken
-      return LessThan
-    Just Lexer.TGT -> do
-      takeToken
-      return GreaterThan
-    Just Lexer.TLE -> do
-      takeToken
-      return LessOrEqual
-    Just Lexer.TGE -> do
-      takeToken
-      return GreaterOrEqual
-    others ->
-      throwExpectTokensError "parseBinop" 
-      (Lexer.tokensFromList 
-      [Lexer.Neg, Lexer.Plus, Lexer.Mul, Lexer.Div, Lexer.Rem, Lexer.And, Lexer.Or, Lexer.TEQ, Lexer.TNE, Lexer.TLT, Lexer.TGT, Lexer.TLE, Lexer.TGE]) 
-      others
+      return bop
+    Nothing ->
+      throwExpectTokensError
+        "parseBinop"
+        (Lexer.tokensFromList (M.keys binaryOperatorMap))
+        nextToken
 
 -- | Parse an identifier
 --
