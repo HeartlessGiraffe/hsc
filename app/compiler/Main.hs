@@ -9,6 +9,7 @@ import System.Exit (exitFailure)
 import Emission.Emission
 import System.FilePath (replaceExtension)
 import SemanticAnalysis.VariableResolution
+import qualified Data.Text.IO as TIO
 
 main :: IO ()
 main = do
@@ -22,7 +23,7 @@ main = do
             Right ast -> do
               let assembly = constructProgram (convertProgramWithFixedInstructions (genProgram ast))
               let outputFilePath = replaceExtension filePath "s"
-              writeFile outputFilePath assembly
+              TIO.writeFile outputFilePath assembly
               putStrLn $ "Assembly written to " ++ outputFilePath
             Left err -> do 
               print err 

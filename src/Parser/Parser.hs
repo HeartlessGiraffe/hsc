@@ -37,7 +37,6 @@ import qualified Data.Map as M
 import Data.Maybe (fromJust)
 import qualified Lexer.Lexer as Lexer
 import qualified Data.Sequence as Seq
-
 -- * SC AST
 
 -- ** AST Definition
