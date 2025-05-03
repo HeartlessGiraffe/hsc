@@ -220,11 +220,15 @@ genProgram (Parser.Program funcDef) =
    in Program fd
 
 genFuncDef :: Parser.FuncDef -> TACKYGen FuncDef
-genFuncDef (Parser.Function name body) = do
-  genBlockItemsInstructions body
+genFuncDef (Parser.Function name block) = do
+  genBlockInstructions block
   TACKYGenState _ is <- get
   let is' = appendInstruction is (Return (Constant 0))
   return $ Function (genIdentifier name) is'
+
+genBlockInstructions :: Parser.Block -> TACKYGen ()
+genBlockInstructions (Parser.Block bis) = 
+  genBlockItemsInstructions bis
 
 genBlockItemsInstructions ::
   (Traversable t) =>
@@ -268,6 +272,8 @@ genSInstructions (Parser.If cond s1 (Just s2)) = do
   appendInst (Label elseLabel)
   genSInstructions s2
   appendInst (Label endLabel)
+genSInstructions (Parser.Compound block) = do 
+  genBlockInstructions block
 
 emitTACKY :: Parser.Exp -> TACKYGen Val
 emitTACKY (Parser.Constant c) =

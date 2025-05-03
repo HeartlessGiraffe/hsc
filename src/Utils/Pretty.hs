@@ -34,6 +34,10 @@ instance Pretty Parser.BlockItem where
   pretty (Parser.D d) = 
     PP.text "D (" <> pretty d <> PP.text ")"
 
+instance Pretty Parser.Block where 
+  pretty (Parser.Block bis) = 
+    PP.text "Block (" <> PP.sep (toList (pretty <$> bis)) <> PP.text ")"
+
 instance Pretty Parser.Declaration where 
   pretty (Parser.Declaration i mE) = 
     case mE of 
@@ -42,7 +46,7 @@ instance Pretty Parser.Declaration where
 
 instance Pretty Parser.FuncDef where
   pretty (Parser.Function name body) =
-    PP.text "Function (" <> pretty name <> PP.text ") {" PP.$$ PP.nest 2 (PP.sep . toList $ pretty <$> body) PP.$$ PP.text "}"
+    PP.text "Function (" <> pretty name <> PP.text ") {" PP.$$ PP.nest 2 (pretty body) PP.$$ PP.text "}"
 
 instance Pretty Parser.Statement where
   pretty (Parser.Return expr) =
@@ -57,6 +61,8 @@ instance Pretty Parser.Statement where
           Just condelse -> PP.text "else (" <> pretty condelse <> PP.text ")"
           Nothing -> PP.text ""
       )
+  pretty (Parser.Compound block) = 
+    PP.text "Compound (" <> pretty block <> PP.text ")"
 
 instance Pretty Parser.Exp where
   pretty (Parser.Constant value) =

@@ -6,6 +6,7 @@ module Parser.Parser
     Identifier (..),
     Program (..),
     BlockItem (..),
+    Block (..),
     Declaration (..),
     FuncDef (..),
     Statement (..),
@@ -45,11 +46,13 @@ import qualified Lexer.Lexer as Lexer
 --
 -- program = Program(function_definition)
 -- function_definition = Function(identifier name, block_item* body)
--- block_item = S(statement) | D(declaration)
+-- block_item = S(statement) | D(declaration)4
+-- block = Block(block_item*)
 -- declaration = Declaration(identifier name, exp? init)
 -- statement = Return(exp)
 --           | Expression(exp)
 --           | If(exp condition, statement then, statement? else)
+--           | Compound(block)
 --           | Null
 -- exp = Constant(int)
 --     | Var(identifier)
@@ -72,7 +75,7 @@ data Program = Program FuncDef
 
 data FuncDef = Function
   { _funcName :: Identifier,
-    _funcBody :: BlockItems
+    _funcBody :: Block
   }
   deriving (Show, Eq)
 
@@ -80,6 +83,9 @@ data BlockItem = S Statement | D Declaration
   deriving (Show, Eq)
 
 type BlockItems = Seq.Seq BlockItem
+
+data Block = Block BlockItems
+  deriving (Show, Eq)
 
 blockItemsAppend :: BlockItems -> BlockItem -> BlockItems
 blockItemsAppend = (Seq.|>)
@@ -101,6 +107,7 @@ data Statement
         _then :: Statement,
         _else :: Maybe Statement
       }
+  | Compound Block
   | Null
   deriving (Show, Eq)
 
@@ -145,12 +152,14 @@ data BinaryOperator
 -- * Parsers
 
 -- <program> ::= <function>
--- <function> ::= "int" <identifier> "(" "void" ")" "{" { <block-item> } "}"
+-- <function> ::= "int" <identifier> "(" "void" ")" <block>
 -- <block-item> ::= <statement> | <declaration>
+-- <block> ::= "{" { <block-item> } "}"
 -- <declaration> ::= "int" <identifier> [ "=" <exp> ] ";"
 -- <statement> ::= "return" <exp> ";"
 --               | <exp> ";"
 --               | "if" "(" <exp> ")" <statement> [ "else" <statement> ]
+--               | <block>
 --               | ";"
 -- <exp> ::= <factor> | <exp> <binop> <exp>
 -- <factor> ::= <int> | <identifier> | <unop> <factor> | "(" <exp> ")"
@@ -221,7 +230,7 @@ parseProgram = do
 
 -- | Parse a function definition
 --
--- <function> ::= "int" <identifier> "(" "void" ")" "{" <statement> "}"
+-- <function> ::= "int" <identifier> "(" "void" ")" <block>
 parseFuncDef :: Parser FuncDef
 parseFuncDef = do
   expect Lexer.IntKeyword
@@ -229,11 +238,25 @@ parseFuncDef = do
   expect Lexer.LeftParen
   expect Lexer.VoidKeyword
   expect Lexer.RightParen
+  Function functionName <$> parseBlock
+
+parseBlockItem :: Parser BlockItem
+parseBlockItem = do
+  nextToken <- peek
+  case nextToken of
+    Just Lexer.IntKeyword -> D <$> parseDeclaration
+    _ -> S <$> parseStatement
+
+-- | Block
+--
+-- <block> ::= "{" { <block-item> } "}"
+parseBlock :: Parser Block
+parseBlock = do 
   expect Lexer.LeftBrace
   body <- loop emptyBlockItem
   expect Lexer.RightBrace
-  return (Function functionName body)
-  where
+  return $ Block body
+ where 
     loop :: BlockItems -> Parser BlockItems
     loop functionBody = do
       nextToken <- peek
@@ -242,13 +265,6 @@ parseFuncDef = do
         _ -> do
           nextBlockItem <- parseBlockItem
           loop (blockItemsAppend functionBody nextBlockItem)
-
-parseBlockItem :: Parser BlockItem
-parseBlockItem = do
-  nextToken <- peek
-  case nextToken of
-    Just Lexer.IntKeyword -> D <$> parseDeclaration
-    _ -> S <$> parseStatement
 
 parseDeclaration :: Parser Declaration
 parseDeclaration = do
@@ -269,6 +285,10 @@ parseDeclaration = do
 -- | Parse a statement
 --
 -- <statement> ::= "return" <exp> ";"
+--               | <exp> ";"
+--               | "if" "(" <exp> ")" <statement> [ "else" <statement> ]
+--               | <block>
+--               | ";"
 parseStatement :: Parser Statement
 parseStatement = do
   nextToken <- peek
@@ -289,21 +309,22 @@ parseStatement = do
       s <- parseStatement
       nToken <- peek
       case nToken of
-        Just Lexer.ElseKeyword -> do 
+        Just Lexer.ElseKeyword -> do
           takeToken
           If e s . Just <$> parseStatement
         _ -> return (If e s Nothing)
+    Just Lexer.LeftBrace -> Compound <$> parseBlock
     Just _ -> do
       expression <- parseExp Lexer.minimumPrecedence
       expect Lexer.Semicolon
       return (Expression expression)
     Nothing -> throwExpectSomethingError "parseStatement"
 
-parseConditionalMiddle :: Parser Exp 
-parseConditionalMiddle = do 
+parseConditionalMiddle :: Parser Exp
+parseConditionalMiddle = do
   takeToken -- consume the ? token
   e <- parseExp Lexer.minimumPrecedence
-  expect Lexer.Colon 
+  expect Lexer.Colon
   return e
 
 -- | Parse a expression
@@ -319,7 +340,7 @@ parseExp p =
                 takeToken
                 right <- parseExp (Lexer.precedence (fromJust _nextToken))
                 return $ Assignment _left right
-              Just Lexer.Question -> do 
+              Just Lexer.Question -> do
                 middle <- parseConditionalMiddle
                 right <- parseExp (Lexer.precedence (fromJust _nextToken))
                 return $ Conditional _left middle right
