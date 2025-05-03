@@ -252,6 +252,22 @@ genSInstructions (Parser.Expression e) = do
   _ <- emitTACKY e
   return ()
 genSInstructions Parser.Null = return ()
+genSInstructions (Parser.If cond s1 Nothing) = do 
+  c <- emitTACKY cond 
+  label <- makeTmpWithName "if_end"
+  appendInst (JumpIfZero c label)
+  genSInstructions s1
+  appendInst (Label label)
+genSInstructions (Parser.If cond s1 (Just s2)) = do 
+  c <- emitTACKY cond 
+  elseLabel <- makeTmpWithName "else"
+  endLabel <- makeTmpWithName "if_end"
+  appendInst (JumpIfZero c elseLabel)
+  genSInstructions s1
+  appendInst (Jump endLabel)
+  appendInst (Label elseLabel)
+  genSInstructions s2
+  appendInst (Label endLabel)
 
 emitTACKY :: Parser.Exp -> TACKYGen Val
 emitTACKY (Parser.Constant c) =
@@ -313,6 +329,21 @@ emitTACKY (Parser.Assignment (Parser.Var v) rhs) = do
   return var'
 emitTACKY (Parser.Assignment lhs _) =
   error $ "emitTACKY: lhs" ++ show lhs ++ " is not a variable !? It should have been resolved!"
+emitTACKY (Parser.Conditional cond e1 e2) = do 
+  c <- emitTACKY cond 
+  e2Label <- makeTmpWithName "cond_e2_label"
+  end <- makeTmpWithName "cond_end"
+  resName <- makeTmp
+  let res = Var resName
+  appendInst (JumpIfZero c e2Label)
+  v1 <- emitTACKY e1 
+  appendInst (Copy v1 res)
+  appendInst (Jump end)
+  appendInst (Label e2Label)
+  v2 <- emitTACKY e2 
+  appendInst (Copy v2 res)
+  appendInst (Label end)
+  return res
 
 genUnaryOperator :: Parser.UnaryOperator -> UnaryOperator
 genUnaryOperator Parser.Complement = Complement

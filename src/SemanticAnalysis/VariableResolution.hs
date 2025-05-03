@@ -79,6 +79,13 @@ resolveStatement :: Statement -> VariableResolution Statement
 resolveStatement (Return e) = Return <$> resolveExp e
 resolveStatement (Expression e) = Expression <$> resolveExp e
 resolveStatement Null = return Null
+resolveStatement (If c t me) = do 
+  c' <- resolveExp c 
+  t' <- resolveStatement t 
+  e' <- case me of 
+    Just e -> Just <$> resolveStatement e
+    Nothing -> return Nothing
+  return $ If c' t' e'
 
 resolveExp :: Exp -> VariableResolution Exp
 resolveExp (Assignment exp1 exp2) =
@@ -100,3 +107,8 @@ resolveExp (Binary op e1 e2) = do
   e2' <- resolveExp e2
   return (Binary op e1' e2')
 resolveExp (Constant i) = return (Constant i)
+resolveExp (Conditional c e1 e2) = do 
+  c' <- resolveExp c 
+  e1' <- resolveExp e1 
+  e2' <- resolveExp e2 
+  return (Conditional c' e1' e2')

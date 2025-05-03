@@ -35,8 +35,9 @@ import Control.Monad.Except
 import Control.Monad.State
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
-import qualified Lexer.Lexer as Lexer
 import qualified Data.Sequence as Seq
+import qualified Lexer.Lexer as Lexer
+
 -- * SC AST
 
 -- ** AST Definition
@@ -46,12 +47,16 @@ import qualified Data.Sequence as Seq
 -- function_definition = Function(identifier name, block_item* body)
 -- block_item = S(statement) | D(declaration)
 -- declaration = Declaration(identifier name, exp? init)
--- statement = Return(exp) | Expression(exp) | Null
+-- statement = Return(exp)
+--           | Expression(exp)
+--           | If(exp condition, statement then, statement? else)
+--           | Null
 -- exp = Constant(int)
 --     | Var(identifier)
 --     | Unary(unary_operator, exp)
 --     | Binary(binary_operator, exp, exp)
 --     | Assignment(exp, exp)
+--     | Conditional(exp condition, exp, exp)
 -- unary_operator = Complement | Negate | Not
 -- binary_operator = Add | Subtract | Multiply | Divide | Remainder | And | Or
 --                 | Equal | NotEqual | LessThan | LessOrEqual
@@ -91,6 +96,11 @@ data Declaration = Declaration
 data Statement
   = Return Exp
   | Expression Exp
+  | If
+      { _condition :: Exp,
+        _then :: Statement,
+        _else :: Maybe Statement
+      }
   | Null
   deriving (Show, Eq)
 
@@ -100,6 +110,7 @@ data Exp
   | Unary UnaryOperator Exp
   | Binary BinaryOperator Exp Exp
   | Assignment Exp Exp
+  | Conditional Exp Exp Exp
   deriving (Show, Eq)
 
 isConstant :: Exp -> Bool
@@ -137,7 +148,10 @@ data BinaryOperator
 -- <function> ::= "int" <identifier> "(" "void" ")" "{" { <block-item> } "}"
 -- <block-item> ::= <statement> | <declaration>
 -- <declaration> ::= "int" <identifier> [ "=" <exp> ] ";"
--- <statement> ::= "return" <exp> ";" | <exp> ";" | ";"
+-- <statement> ::= "return" <exp> ";"
+--               | <exp> ";"
+--               | "if" "(" <exp> ")" <statement> [ "else" <statement> ]
+--               | ";"
 -- <exp> ::= <factor> | <exp> <binop> <exp>
 -- <factor> ::= <int> | <identifier> | <unop> <factor> | "(" <exp> ")"
 -- <unop> ::= "-" | "~" | "!"
@@ -267,15 +281,34 @@ parseStatement = do
     Just Lexer.Semicolon -> do
       takeToken
       return Null
+    Just Lexer.IfKeyword -> do
+      takeToken
+      expect Lexer.LeftParen
+      e <- parseExp Lexer.minimumPrecedence
+      expect Lexer.RightParen
+      s <- parseStatement
+      nToken <- peek
+      case nToken of
+        Just Lexer.ElseKeyword -> do 
+          takeToken
+          If e s . Just <$> parseStatement
+        _ -> return (If e s Nothing)
     Just _ -> do
       expression <- parseExp Lexer.minimumPrecedence
       expect Lexer.Semicolon
       return (Expression expression)
     Nothing -> throwExpectSomethingError "parseStatement"
 
+parseConditionalMiddle :: Parser Exp 
+parseConditionalMiddle = do 
+  takeToken -- consume the ? token
+  e <- parseExp Lexer.minimumPrecedence
+  expect Lexer.Colon 
+  return e
+
 -- | Parse a expression
 --
--- <exp> ::= <factor> | <exp> <binop> <exp>
+-- <exp> ::= <factor> | <exp> <binop> <exp> | <exp> "?" <exp> ":" <exp>
 parseExp :: Lexer.Precedence -> Parser Exp
 parseExp p =
   let loop _left _nextToken =
@@ -286,6 +319,10 @@ parseExp p =
                 takeToken
                 right <- parseExp (Lexer.precedence (fromJust _nextToken))
                 return $ Assignment _left right
+              Just Lexer.Question -> do 
+                middle <- parseConditionalMiddle
+                right <- parseExp (Lexer.precedence (fromJust _nextToken))
+                return $ Conditional _left middle right
               _ -> do
                 operator <- parseBinop
                 right <- parseExp (Lexer.precedence (fromJust _nextToken) + 1)

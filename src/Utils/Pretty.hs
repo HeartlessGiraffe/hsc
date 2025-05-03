@@ -30,15 +30,15 @@ instance Pretty Parser.Program where
 
 instance Pretty Parser.BlockItem where 
   pretty (Parser.S s) = 
-    PP.text "S (" PP.$$ pretty s PP.$$ PP.text ")"
+    PP.text "S (" <> pretty s <> PP.text ")"
   pretty (Parser.D d) = 
-    PP.text "D (" PP.$$ pretty d PP.$$ PP.text ")"
+    PP.text "D (" <> pretty d <> PP.text ")"
 
 instance Pretty Parser.Declaration where 
   pretty (Parser.Declaration i mE) = 
     case mE of 
       Nothing -> pretty i
-      Just e -> pretty i PP.$$ pretty e
+      Just e -> pretty i <> PP.text ", " <> pretty e
 
 instance Pretty Parser.FuncDef where
   pretty (Parser.Function name body) =
@@ -51,6 +51,12 @@ instance Pretty Parser.Statement where
     PP.text "Expression (" <> pretty expr <> PP.text ")"
   pretty Parser.Null =
     PP.text "Null"
+  pretty (Parser.If cond condthen mcondelse) = 
+    PP.text "If (" <> pretty cond <> PP.text ")" <> PP.text "then(" <> pretty condthen <> PP.text ")" 
+    <> (case mcondelse of 
+          Just condelse -> PP.text "else (" <> pretty condelse <> PP.text ")"
+          Nothing -> PP.text ""
+      )
 
 instance Pretty Parser.Exp where
   pretty (Parser.Constant value) =
@@ -66,6 +72,8 @@ instance Pretty Parser.Exp where
       else PP.text "Binary(" PP.$$ PP.nest 2 (pretty bOp) <> PP.text ", " PP.$$ PP.nest 2 (pretty e1) <> PP.text ", " PP.$$ PP.nest 2 (pretty e2) PP.$$ PP.text ")"
   pretty (Parser.Assignment e1 e2) =
     PP.text "Assignment(" <> pretty e1 <> PP.text ", " <> pretty e2 <> PP.text ")"
+  pretty (Parser.Conditional condE e1 e2) = 
+    PP.text "Conditional(" <> pretty condE <> PP.text ", " <> pretty e1 <> PP.text ", " <> pretty e2 <> PP.text ")"
 
 instance Pretty Parser.UnaryOperator where
   pretty Parser.Complement = PP.text "Complement"

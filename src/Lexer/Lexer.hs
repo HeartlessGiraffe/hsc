@@ -103,6 +103,14 @@ data Token
     TGE
   | -- | 赋值
     Assign
+  | -- | If
+    IfKeyword 
+  | -- | Else 
+    ElseKeyword
+  | -- | question mark in a conditional expression
+    Question
+  | -- | colon in a conditional expression
+    Colon
   deriving (Show, Eq, Ord)
 
 -- | Tokens
@@ -251,6 +259,18 @@ geRegex = ">="
 assignRegex :: TokenRegex 
 assignRegex = "="
 
+ifKeywordRegex :: TokenRegex
+ifKeywordRegex = "if"
+
+elseKeywordRegex :: TokenRegex
+elseKeywordRegex = "else"
+
+questionRegex :: TokenRegex
+questionRegex = "\\?"
+
+colonRegex :: TokenRegex
+colonRegex = "\\:"
+
 -- | token的正则表达式
 tokenRegexes :: [(TokenRegex, Token)]
 tokenRegexes =
@@ -282,7 +302,11 @@ tokenRegexes =
           (gtRegex, TGT),
           (leRegex, TLE),
           (geRegex, TGE),
-          (assignRegex, Assign)
+          (assignRegex, Assign),
+          (ifKeywordRegex, IfKeyword),
+          (elseKeywordRegex, ElseKeyword),
+          (questionRegex, Question),
+          (colonRegex, Colon)
         ]
 
 -- | Token是二元表达式
@@ -302,6 +326,7 @@ isTBinary TGT = True
 isTBinary TLE = True
 isTBinary TGE = True
 isTBinary Assign = True
+isTBinary Question = True
 isTBinary _ = False
 
 -- | 优先级
@@ -326,6 +351,7 @@ precedence TEQ = 30
 precedence TNE = 30
 precedence And = 10
 precedence Or = 5
+precedence Question = 3
 precedence Assign = 1
 precedence _ = -1
 
@@ -372,6 +398,10 @@ lenToken TLT = 1
 lenToken TGE = 2
 lenToken TLE = 2
 lenToken Assign = 1
+lenToken IfKeyword = 2
+lenToken ElseKeyword = 4
+lenToken Question = 1
+lenToken Colon = 1
 
 -- | 如果标识符是关键字, 则将其视为关键字
 identifierToKeyword :: Token -> Token
@@ -379,6 +409,8 @@ identifierToKeyword (Identifier name)
   | name == "int" = IntKeyword
   | name == "void" = VoidKeyword
   | name == "return" = ReturnKeyword
+  | name == "if" = IfKeyword 
+  | name == "else" = ElseKeyword
   | otherwise = Identifier name
 identifierToKeyword token = token
 
