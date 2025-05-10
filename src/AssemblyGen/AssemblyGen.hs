@@ -23,8 +23,8 @@ where
 
 import Control.Monad.State
 import qualified Data.Map as M
-import qualified TACKY.TACKY as TACKY
 import qualified Data.Sequence as Seq
+import qualified TACKY.TACKY as TACKY
 
 -- * Assembly represented By ADT
 
@@ -65,7 +65,7 @@ fromInstructionList :: [Instruction] -> Instructions
 fromInstructionList = Seq.fromList
 
 leftAppendInstruction :: Instruction -> Instructions -> Instructions
-leftAppendInstruction i is = i Seq.<| is 
+leftAppendInstruction i is = i Seq.<| is
 
 newtype Identifier = Identifier
   { unIdentifier :: String

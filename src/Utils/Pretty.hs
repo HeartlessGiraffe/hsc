@@ -1,16 +1,18 @@
-{-# LANGUAGE FlexibleInstances #-}  -- GPretty 实例需要
+-- GPretty 实例需要
+{-# LANGUAGE FlexibleInstances #-}
+
 module Utils.Pretty
   ( Pretty (..),
     prettyPrint,
   )
 where
 
-import qualified Text.PrettyPrint as PP
-import qualified Parser.Parser as Parser 
-import qualified TACKY.TACKY as TACKY
 import qualified AssemblyGen.AssemblyGen as AG
+import Data.Foldable (Foldable (..))
+import qualified Parser.Parser as Parser
 import qualified SemanticAnalysis.LoopLabeling as LL
-import Data.Foldable (Foldable(..))
+import qualified TACKY.TACKY as TACKY
+import qualified Text.PrettyPrint as PP
 
 -- | A typeclass for pretty printing
 class Pretty a where
@@ -30,19 +32,19 @@ instance (Pretty a) => Pretty (Parser.ProgramWith a) where
   pretty (Parser.Program funcDef) =
     PP.text "Program {" PP.$$ PP.nest 2 (pretty funcDef) PP.$$ PP.text "}"
 
-instance (Pretty a) => Pretty (Parser.BlockItemWith a) where 
-  pretty (Parser.S s) = 
+instance (Pretty a) => Pretty (Parser.BlockItemWith a) where
+  pretty (Parser.S s) =
     PP.text "S (" <> pretty s <> PP.text ")"
-  pretty (Parser.D d) = 
+  pretty (Parser.D d) =
     PP.text "D (" <> pretty d <> PP.text ")"
 
-instance (Pretty a) => Pretty (Parser.BlockWith a) where 
-  pretty (Parser.Block bis) = 
+instance (Pretty a) => Pretty (Parser.BlockWith a) where
+  pretty (Parser.Block bis) =
     PP.text "Block (" PP.$$ PP.sep (toList (pretty <$> bis)) <> PP.text ")"
 
-instance Pretty Parser.Declaration where 
-  pretty (Parser.Declaration i mE) = 
-    case mE of 
+instance Pretty Parser.Declaration where
+  pretty (Parser.Declaration i mE) =
+    case mE of
       Nothing -> pretty i
       Just e -> pretty i <> PP.text ", " <> pretty e
 
@@ -50,13 +52,13 @@ instance (Pretty a) => Pretty (Parser.FuncDefWith a) where
   pretty (Parser.Function name body) =
     PP.text "Function (" <> pretty name <> PP.text ") {" PP.$$ PP.nest 2 (pretty body) PP.$$ PP.text "}"
 
-instance Pretty Parser.ForInit where 
-  pretty (Parser.InitDecl d) = 
+instance Pretty Parser.ForInit where
+  pretty (Parser.InitDecl d) =
     PP.text "InitDecl (" <> pretty d <> PP.text ")"
-  pretty (Parser.InitExp me) = 
+  pretty (Parser.InitExp me) =
     PP.text "InitDecl (" <> pretty me <> PP.text ")"
 
-instance Pretty (Maybe Parser.Exp) where 
+instance Pretty (Maybe Parser.Exp) where
   pretty Nothing = PP.text ""
   pretty (Just e) = pretty e
 
@@ -67,13 +69,18 @@ instance Pretty Parser.Statement where
     PP.text "Expression (" <> pretty expr <> PP.text ")"
   pretty Parser.Null =
     PP.text "Null"
-  pretty (Parser.If cond condthen mcondelse) = 
-    PP.text "If (" <> pretty cond <> PP.text ")" <> PP.text "then(" <> pretty condthen <> PP.text ")" 
-    <> (case mcondelse of 
-          Just condelse -> PP.text "else (" <> pretty condelse <> PP.text ")"
-          Nothing -> PP.text ""
-      )
-  pretty (Parser.Compound block) = 
+  pretty (Parser.If cond condthen mcondelse) =
+    PP.text "If ("
+      <> pretty cond
+      <> PP.text ")"
+      <> PP.text "then("
+      <> pretty condthen
+      <> PP.text ")"
+      <> ( case mcondelse of
+             Just condelse -> PP.text "else (" <> pretty condelse <> PP.text ")"
+             Nothing -> PP.text ""
+         )
+  pretty (Parser.Compound block) =
     PP.text "Compound (" <> pretty block <> PP.text ")"
   pretty Parser.Break =
     PP.text "Break"
@@ -83,9 +90,8 @@ instance Pretty Parser.Statement where
     PP.text "While(" PP.$$ pretty c <> PP.text ")" PP.$$ PP.text "{" <> pretty b <> PP.text "}"
   pretty (Parser.DoWhile b c) =
     PP.text "DoWhile{" PP.$$ pretty b <> PP.text "}" PP.$$ PP.text "(" <> pretty c <> PP.text ")"
-  pretty (Parser.For i me1 me2 s) = 
+  pretty (Parser.For i me1 me2 s) =
     PP.text "For(" PP.$$ pretty i <> PP.text ";" PP.$$ pretty me1 <> PP.text ";" PP.$$ pretty me2 <> PP.text ";" PP.$$ PP.text ")" PP.$$ PP.text "(" <> pretty s <> PP.text ")"
-
 
 instance Pretty Parser.Exp where
   pretty (Parser.Constant value) =
@@ -101,7 +107,7 @@ instance Pretty Parser.Exp where
       else PP.text "Binary(" PP.$$ PP.nest 2 (pretty bOp) <> PP.text ", " PP.$$ PP.nest 2 (pretty e1) <> PP.text ", " PP.$$ PP.nest 2 (pretty e2) PP.$$ PP.text ")"
   pretty (Parser.Assignment e1 e2) =
     PP.text "Assignment(" <> pretty e1 <> PP.text ", " <> pretty e2 <> PP.text ")"
-  pretty (Parser.Conditional condE e1 e2) = 
+  pretty (Parser.Conditional condE e1 e2) =
     PP.text "Conditional(" <> pretty condE <> PP.text ", " <> pretty e1 <> PP.text ", " <> pretty e2 <> PP.text ")"
 
 instance Pretty Parser.UnaryOperator where
@@ -124,7 +130,7 @@ instance Pretty Parser.BinaryOperator where
   pretty Parser.LessOrEqual = PP.text "LessOrEqual"
   pretty Parser.GreaterOrEqual = PP.text "GreaterOrEqual"
 
--- LoopLabelled 
+-- LoopLabelled
 
 instance Pretty LL.LabelledStatement where
   pretty (LL.Return expr) =
@@ -133,13 +139,18 @@ instance Pretty LL.LabelledStatement where
     PP.text "Expression (" <> pretty expr <> PP.text ")"
   pretty LL.Null =
     PP.text "Null"
-  pretty (LL.If cond condthen mcondelse) = 
-    PP.text "If (" <> pretty cond <> PP.text ")" <> PP.text "then(" <> pretty condthen <> PP.text ")" 
-    <> (case mcondelse of 
-          Just condelse -> PP.text "else (" <> pretty condelse <> PP.text ")"
-          Nothing -> PP.text ""
-      )
-  pretty (LL.Compound block) = 
+  pretty (LL.If cond condthen mcondelse) =
+    PP.text "If ("
+      <> pretty cond
+      <> PP.text ")"
+      <> PP.text "then("
+      <> pretty condthen
+      <> PP.text ")"
+      <> ( case mcondelse of
+             Just condelse -> PP.text "else (" <> pretty condelse <> PP.text ")"
+             Nothing -> PP.text ""
+         )
+  pretty (LL.Compound block) =
     PP.text "Compound (" PP.$$ pretty block <> PP.text ")"
   pretty (LL.Break label) =
     PP.text "Break(" <> pretty label <> PP.text ")"
@@ -149,7 +160,7 @@ instance Pretty LL.LabelledStatement where
     PP.text "While(" PP.$$ pretty c <> PP.text "LLabel(" <> pretty label <> PP.text ")" <> PP.text ")" PP.$$ PP.text "{" <> pretty b <> PP.text "}"
   pretty (LL.DoWhile b c label) =
     PP.text "DoWhile{" PP.$$ pretty b <> PP.text "LLabel(" <> pretty label <> PP.text ")" <> PP.text "}" PP.$$ PP.text "(" <> pretty c <> PP.text ")"
-  pretty (LL.For i me1 me2 s label) = 
+  pretty (LL.For i me1 me2 s label) =
     PP.text "For(" PP.$$ pretty i <> PP.text ";" PP.$$ pretty me1 <> PP.text ";" PP.$$ pretty me2 <> PP.text ";" PP.$$ PP.text "LLabel(" <> pretty label <> PP.text ")" <> PP.text ")" PP.$$ PP.text "(" <> pretty s <> PP.text ")"
 
 -- TACKY AST
@@ -209,7 +220,6 @@ instance Pretty TACKY.BinaryOperator where
   pretty TACKY.LessOrEqual = PP.text "LessOrEqual"
 
 -- Assembly AST
-
 
 instance Pretty AG.Program where
   pretty (AG.Program funcDef) =

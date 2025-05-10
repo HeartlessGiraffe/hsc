@@ -26,7 +26,7 @@ module Parser.Parser
     Expect,
     ParseError (..),
     Parser,
-    evalParseIO, 
+    evalParseIO,
     evalParse,
     parseProgram,
     parseFuncDef,

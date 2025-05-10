@@ -310,13 +310,13 @@ genLSInstructions (LL.For fInit meCond mePost sBody label) = do
   appendInst (Jump startLabel)
   appendInst (Label breakLabel)
 
-makeForControllingEVal :: Maybe Val -> Val 
-makeForControllingEVal (Just v) = v 
+makeForControllingEVal :: Maybe Val -> Val
+makeForControllingEVal (Just v) = v
 makeForControllingEVal Nothing = Constant 1
 
 genForInitInstructions :: Parser.ForInit -> TACKYGen ()
 genForInitInstructions (Parser.InitDecl d) = genDInstructions d
-genForInitInstructions (Parser.InitExp me) = do 
+genForInitInstructions (Parser.InitExp me) = do
   _ <- emitMTACKY me
   return ()
 

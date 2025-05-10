@@ -4,7 +4,7 @@ module SemanticAnalysis.LoopLabeling
     LabelledBlock,
     LabelledBlockItems,
     LabelledBlockItem,
-    LabelledStatement(..),
+    LabelledStatement (..),
     labelProgram,
     labelProgramIO,
   )
@@ -60,10 +60,10 @@ data LabelledStatement
   | Null
   deriving (Show, Eq)
 
-data LoopLabelState = LoopLebelState {
-  currentLoopID :: Maybe Int 
-  , loopCnt :: Int
-}
+data LoopLabelState = LoopLebelState
+  { currentLoopID :: Maybe Int,
+    loopCnt :: Int
+  }
 
 initLoopLabelState :: LoopLabelState
 initLoopLabelState = LoopLebelState Nothing 0
@@ -77,14 +77,14 @@ type WithException = Either LLException
 
 type LoopLabeling = StateT LoopLabelState WithException
 
-getCurrentLID :: LoopLabeling (Maybe Int) 
+getCurrentLID :: LoopLabeling (Maybe Int)
 getCurrentLID = gets currentLoopID
 
 getCurrentLCnt :: LoopLabeling Int
 getCurrentLCnt = gets loopCnt
 
 putLID :: Maybe Int -> LoopLabeling ()
-putLID lid = do 
+putLID lid = do
   cnt <- getCurrentLCnt
   put (LoopLebelState lid cnt)
 
@@ -135,19 +135,19 @@ labelStatement P.Continue = do
     Nothing -> throwError ContinueStatementOutsideOfLoop
     Just label -> return $ Continue (makeIdentifierWithLID label)
 labelStatement (P.While condE bodyS) = do
-  lid <- getCurrentLID 
+  lid <- getCurrentLID
   newLabel <- makeLoopLabel
   bodyS' <- labelStatement bodyS
   putLID lid
   return $ While condE bodyS' (makeIdentifierWithLID newLabel)
 labelStatement (P.DoWhile bodyS condE) = do
-  lid <- getCurrentLID 
+  lid <- getCurrentLID
   newLabel <- makeLoopLabel
   bodyS' <- labelStatement bodyS
   putLID lid
   return $ DoWhile bodyS' condE (makeIdentifierWithLID newLabel)
 labelStatement (P.For fInit condME1 postME2 bodyS) = do
-  lid <- getCurrentLID 
+  lid <- getCurrentLID
   newLabel <- makeLoopLabel
   bodyS' <- labelStatement bodyS
   putLID lid

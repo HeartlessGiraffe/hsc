@@ -2,8 +2,8 @@ module Main (main) where
 
 import Lexer.Lexer (lexerIO)
 import Parser.Parser (evalParseIO)
-import SemanticAnalysis.VariableResolution
 import SemanticAnalysis.LoopLabeling
+import SemanticAnalysis.VariableResolution
 import System.Environment (getArgs)
 import Utils.Pretty (prettyPrint)
 

@@ -106,23 +106,18 @@ data Token
   | -- | 赋值
     Assign
   | -- | If
-    IfKeyword 
-  | -- | Else 
+    IfKeyword
+  | -- | Else
     ElseKeyword
   | -- | question mark in a conditional expression
     Question
   | -- | colon in a conditional expression
     Colon
-  | 
-    DoKeyword 
-  | 
-    WhileKeyword 
-  | 
-    ForKeyword 
-  | 
-    BreakKeyword 
-  | 
-    ContinueKeyword
+  | DoKeyword
+  | WhileKeyword
+  | ForKeyword
+  | BreakKeyword
+  | ContinueKeyword
   deriving (Show, Eq, Ord)
 
 -- | Tokens
@@ -268,7 +263,7 @@ geRegex :: TokenRegex
 geRegex = ">="
 
 -- | 赋值
-assignRegex :: TokenRegex 
+assignRegex :: TokenRegex
 assignRegex = "="
 
 ifKeywordRegex :: TokenRegex
@@ -446,9 +441,9 @@ identifierToKeyword (Identifier name)
   | name == "int" = IntKeyword
   | name == "void" = VoidKeyword
   | name == "return" = ReturnKeyword
-  | name == "if" = IfKeyword 
+  | name == "if" = IfKeyword
   | name == "else" = ElseKeyword
-  | name == "do" = DoKeyword 
+  | name == "do" = DoKeyword
   | name == "while" = WhileKeyword
   | name == "for" = ForKeyword
   | name == "break" = BreakKeyword

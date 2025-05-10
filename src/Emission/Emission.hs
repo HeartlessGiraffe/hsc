@@ -1,12 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 module Emission.Emission
   ( constructProgram,
   )
 where
 
 import qualified AssemblyGen.AssemblyGen as AG
+import Data.Foldable (Foldable (..))
 import qualified Data.Text as T
-import Data.Foldable (Foldable(..))
 
 -- | linux stack line
 linuxStackLine :: T.Text

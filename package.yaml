@@ -27,7 +27,6 @@ dependencies:
 - filepath >= 1.4.2.2
 - containers >= 0.6.7
 - text >= 2.0.2
-- prettyprinter >= 1.7.1
 
 ghc-options:
 - -Wall
