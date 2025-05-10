@@ -27,7 +27,7 @@ module TACKY.TACKY
     makeTmp,
 
     -- ** Generating TACKY
-    genProgram,
+    genLProgram,
   )
 where
 
@@ -35,6 +35,7 @@ import Control.Monad.State
 import Data.Foldable (traverse_)
 import qualified Data.Sequence as Seq
 import qualified Parser.Parser as Parser
+import qualified SemanticAnalysis.LoopLabeling as LL
 
 -- * TACKY AST
 
@@ -214,32 +215,32 @@ makeTmpWithName name = do
 genIdentifier :: Parser.Identifier -> Identifier
 genIdentifier (Parser.Identifier i) = Identifier i
 
-genProgram :: Parser.Program -> Program
-genProgram (Parser.Program funcDef) =
-  let fd = evalState (genFuncDef funcDef) initTACKYGenState
+genLBlockItemInstructions :: LL.LabelledBlockItem -> TACKYGen ()
+genLBlockItemInstructions (Parser.S s) = genLSInstructions s
+genLBlockItemInstructions (Parser.D d) = genDInstructions d
+
+genLBlockItemsInstructions ::
+  (Traversable t) =>
+  t LL.LabelledBlockItem ->
+  TACKYGen ()
+genLBlockItemsInstructions bis = do
+  traverse_ genLBlockItemInstructions bis
+
+genLBlockInstructions :: LL.LabelledBlock -> TACKYGen ()
+genLBlockInstructions (Parser.Block bis) =
+  genLBlockItemsInstructions bis
+
+genLProgram :: LL.LebelledProgram -> Program
+genLProgram (Parser.Program funcDef) =
+  let fd = evalState (genLFuncDef funcDef) initTACKYGenState
    in Program fd
 
-genFuncDef :: Parser.FuncDef -> TACKYGen FuncDef
-genFuncDef (Parser.Function name block) = do
-  genBlockInstructions block
+genLFuncDef :: LL.LabelledFuncDef -> TACKYGen FuncDef
+genLFuncDef (Parser.Function name block) = do
+  genLBlockInstructions block
   TACKYGenState _ is <- get
   let is' = appendInstruction is (Return (Constant 0))
   return $ Function (genIdentifier name) is'
-
-genBlockInstructions :: Parser.Block -> TACKYGen ()
-genBlockInstructions (Parser.Block bis) = 
-  genBlockItemsInstructions bis
-
-genBlockItemsInstructions ::
-  (Traversable t) =>
-  t Parser.BlockItem ->
-  TACKYGen ()
-genBlockItemsInstructions bis = do
-  traverse_ genBlockItemInstructions bis
-
-genBlockItemInstructions :: Parser.BlockItem -> TACKYGen ()
-genBlockItemInstructions (Parser.S s) = genSInstructions s
-genBlockItemInstructions (Parser.D d) = genDInstructions d
 
 genDInstructions :: Parser.Declaration -> TACKYGen ()
 genDInstructions (Parser.Declaration name (Just e)) = do
@@ -248,32 +249,86 @@ genDInstructions (Parser.Declaration name (Just e)) = do
   appendInst (Copy val var)
 genDInstructions (Parser.Declaration _ Nothing) = return ()
 
-genSInstructions :: Parser.Statement -> TACKYGen ()
-genSInstructions (Parser.Return e) = do
+genLSInstructions :: LL.LabelledStatement -> TACKYGen ()
+genLSInstructions (LL.Return e) = do
   val <- emitTACKY e
   appendInst (Return val)
-genSInstructions (Parser.Expression e) = do
+genLSInstructions (LL.Expression e) = do
   _ <- emitTACKY e
   return ()
-genSInstructions Parser.Null = return ()
-genSInstructions (Parser.If cond s1 Nothing) = do 
-  c <- emitTACKY cond 
+genLSInstructions LL.Null = return ()
+genLSInstructions (LL.If cond s1 Nothing) = do
+  c <- emitTACKY cond
   label <- makeTmpWithName "if_end"
   appendInst (JumpIfZero c label)
-  genSInstructions s1
+  genLSInstructions s1
   appendInst (Label label)
-genSInstructions (Parser.If cond s1 (Just s2)) = do 
-  c <- emitTACKY cond 
+genLSInstructions (LL.If cond s1 (Just s2)) = do
+  c <- emitTACKY cond
   elseLabel <- makeTmpWithName "else"
   endLabel <- makeTmpWithName "if_end"
   appendInst (JumpIfZero c elseLabel)
-  genSInstructions s1
+  genLSInstructions s1
   appendInst (Jump endLabel)
   appendInst (Label elseLabel)
-  genSInstructions s2
+  genLSInstructions s2
   appendInst (Label endLabel)
-genSInstructions (Parser.Compound block) = do 
-  genBlockInstructions block
+genLSInstructions (LL.Compound block) = do
+  genLBlockInstructions block
+genLSInstructions (LL.Break label) = do
+  appendInst (Jump (makeBreakLabel label))
+genLSInstructions (LL.Continue label) = do
+  appendInst (Jump (makeContinueLabel label))
+genLSInstructions (LL.DoWhile sBody eCond label) = do
+  startLabel <- makeTmpWithName "do_while_start"
+  appendInst (Label startLabel)
+  genLSInstructions sBody
+  appendInst (Label (makeContinueLabel label))
+  v <- emitTACKY eCond
+  appendInst (JumpIfNotZero v startLabel)
+  appendInst (Label (makeBreakLabel label))
+genLSInstructions (LL.While eCond sBody label) = do
+  let continueLabel = makeContinueLabel label
+      breakLabel = makeBreakLabel label
+  appendInst (Label continueLabel)
+  v <- emitTACKY eCond
+  appendInst (JumpIfZero v breakLabel)
+  genLSInstructions sBody
+  appendInst (Jump continueLabel)
+  appendInst (Label breakLabel)
+genLSInstructions (LL.For fInit meCond mePost sBody label) = do
+  let continueLabel = makeContinueLabel label
+      breakLabel = makeBreakLabel label
+  startLabel <- makeTmpWithName "for_start"
+  genForInitInstructions fInit
+  appendInst (Label startLabel)
+  mv1 <- emitMTACKY meCond
+  appendInst (JumpIfZero (makeForControllingEVal mv1) breakLabel)
+  genLSInstructions sBody
+  appendInst (Label continueLabel)
+  _ <- emitMTACKY mePost
+  appendInst (Jump startLabel)
+  appendInst (Label breakLabel)
+
+makeForControllingEVal :: Maybe Val -> Val 
+makeForControllingEVal (Just v) = v 
+makeForControllingEVal Nothing = Constant 1
+
+genForInitInstructions :: Parser.ForInit -> TACKYGen ()
+genForInitInstructions (Parser.InitDecl d) = genDInstructions d
+genForInitInstructions (Parser.InitExp me) = do 
+  _ <- emitMTACKY me
+  return ()
+
+makeBreakLabel :: Parser.Identifier -> Identifier
+makeBreakLabel (Parser.Identifier name) = Identifier $ "break_" <> name
+
+makeContinueLabel :: Parser.Identifier -> Identifier
+makeContinueLabel (Parser.Identifier name) = Identifier $ "continue_" <> name
+
+emitMTACKY :: Maybe Parser.Exp -> TACKYGen (Maybe Val)
+emitMTACKY (Just e) = Just <$> emitTACKY e
+emitMTACKY Nothing = return Nothing
 
 emitTACKY :: Parser.Exp -> TACKYGen Val
 emitTACKY (Parser.Constant c) =
@@ -335,18 +390,18 @@ emitTACKY (Parser.Assignment (Parser.Var v) rhs) = do
   return var'
 emitTACKY (Parser.Assignment lhs _) =
   error $ "emitTACKY: lhs" ++ show lhs ++ " is not a variable !? It should have been resolved!"
-emitTACKY (Parser.Conditional cond e1 e2) = do 
-  c <- emitTACKY cond 
+emitTACKY (Parser.Conditional cond e1 e2) = do
+  c <- emitTACKY cond
   e2Label <- makeTmpWithName "cond_e2_label"
   end <- makeTmpWithName "cond_end"
   resName <- makeTmp
   let res = Var resName
   appendInst (JumpIfZero c e2Label)
-  v1 <- emitTACKY e1 
+  v1 <- emitTACKY e1
   appendInst (Copy v1 res)
   appendInst (Jump end)
   appendInst (Label e2Label)
-  v2 <- emitTACKY e2 
+  v2 <- emitTACKY e2
   appendInst (Copy v2 res)
   appendInst (Label end)
   return res

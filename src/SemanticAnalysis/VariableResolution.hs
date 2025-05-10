@@ -1,5 +1,6 @@
 module SemanticAnalysis.VariableResolution
   ( resolveProgram,
+    resolveProgramIO,
   )
 where
 
@@ -7,6 +8,7 @@ import Control.Monad.Except
 import Control.Monad.State
 import qualified Data.Map as M
 import Parser.Parser
+import Utils.Base (leftErrorIO)
 
 type FromCurrentBlock = Bool
 
@@ -38,7 +40,7 @@ getVariableMap :: VariableResolution VariableMap
 getVariableMap = gets variableMap
 
 putVariableMap :: VariableMap -> VariableResolution ()
-putVariableMap vm = do 
+putVariableMap vm = do
   i <- gets uniqNameCounter
   put (VariableResolutionState vm i)
 
@@ -63,6 +65,9 @@ resolveProgram :: Program -> WithException Program
 resolveProgram (Program funcDef) =
   Program <$> evalStateT (resolveFuncDef funcDef) initVariableResolutionS
 
+resolveProgramIO :: Program -> IO Program
+resolveProgramIO = leftErrorIO resolveProgram
+
 resolveFuncDef :: FuncDef -> VariableResolution FuncDef
 resolveFuncDef (Function name block) = Function name <$> resolveBlock block
 
@@ -73,7 +78,7 @@ resolveBlockItems ::
 resolveBlockItems = traverse resolveBlockItem
 
 resolveBlock :: Block -> VariableResolution Block
-resolveBlock (Block block) = do 
+resolveBlock (Block block) = do
   b' <- resolveBlockItems block
   return (Block b')
 
@@ -84,7 +89,7 @@ resolveBlockItem (D d) = D <$> resolveDeclaration d
 resolveDeclaration :: Declaration -> VariableResolution Declaration
 resolveDeclaration (Declaration name mInit) = do
   vm <- getVariableMap
-  case M.lookup name vm of 
+  case M.lookup name vm of
     Just (_, True) -> throwError (DuplicatedVariable name)
     _ -> do
       uniqueName <- makeTemporary name
@@ -105,12 +110,39 @@ resolveStatement (If c t me) = do
     Just e -> Just <$> resolveStatement e
     Nothing -> return Nothing
   return $ If c' t' e'
-resolveStatement (Compound block) = do 
+resolveStatement (Compound block) = do
   m' <- getVariableMap
   putVariableMap (setNotFromCurrentBlock m')
   b' <- resolveBlock block
   putVariableMap m'
   return $ Compound b'
+resolveStatement Break = return Break
+resolveStatement Continue = return Continue
+resolveStatement (While e s) = do
+  e' <- resolveExp e
+  s' <- resolveStatement s
+  return (While e' s')
+resolveStatement (DoWhile s e) = do
+  s' <- resolveStatement s
+  e' <- resolveExp e
+  return (DoWhile s' e')
+resolveStatement (For i cond post body) = do
+  m' <- getVariableMap
+  putVariableMap (setNotFromCurrentBlock m')
+  i' <- resolveForInit i
+  cond' <- resolveMaybeExp cond
+  post' <- resolveMaybeExp post
+  body' <- resolveStatement body
+  putVariableMap m'
+  return $ For i' cond' post' body'
+
+resolveForInit :: ForInit -> VariableResolution ForInit
+resolveForInit (InitExp e) = InitExp <$> resolveMaybeExp e
+resolveForInit (InitDecl d) = InitDecl <$> resolveDeclaration d
+
+resolveMaybeExp :: Maybe Exp -> VariableResolution (Maybe Exp)
+resolveMaybeExp Nothing = return Nothing
+resolveMaybeExp (Just e) = Just <$> resolveExp e
 
 resolveExp :: Exp -> VariableResolution Exp
 resolveExp (Assignment exp1 exp2) =

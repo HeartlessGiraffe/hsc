@@ -4,11 +4,17 @@
 module Parser.Parser
   ( -- * AST
     Identifier (..),
-    Program (..),
-    BlockItem (..),
-    Block (..),
+    ProgramWith (..),
+    Program,
+    BlockItemWith (..),
+    BlockItem,
+    BlockItemsWith,
+    BlockWith (..),
+    Block,
     Declaration (..),
-    FuncDef (..),
+    ForInit (..),
+    FuncDefWith (..),
+    FuncDef,
     Statement (..),
     Exp (..),
     isConstant,
@@ -20,6 +26,7 @@ module Parser.Parser
     Expect,
     ParseError (..),
     Parser,
+    evalParseIO, 
     evalParse,
     parseProgram,
     parseFuncDef,
@@ -38,6 +45,7 @@ import qualified Data.Map as M
 import Data.Maybe (fromJust)
 import qualified Data.Sequence as Seq
 import qualified Lexer.Lexer as Lexer
+import Utils.Base (leftErrorIO)
 
 -- * SC AST
 
@@ -49,10 +57,16 @@ import qualified Lexer.Lexer as Lexer
 -- block_item = S(statement) | D(declaration)4
 -- block = Block(block_item*)
 -- declaration = Declaration(identifier name, exp? init)
+-- for_init = InitDecl(declaration) | InitExp(exp?)
 -- statement = Return(exp)
 --           | Expression(exp)
 --           | If(exp condition, statement then, statement? else)
 --           | Compound(block)
+--           | Break
+--           | Continue
+--           | While(exp condition, statement body)
+--           | DoWhile(statement body, exp condition)
+--           | For(for_init init, exp? condition, exp? post, statement body)
 --           | Null
 -- exp = Constant(int)
 --     | Var(identifier)
@@ -70,22 +84,32 @@ newtype Identifier = Identifier
   }
   deriving (Show, Eq, Ord)
 
-data Program = Program FuncDef
+data ProgramWith s = Program (FuncDefWith s)
   deriving (Show, Eq)
 
-data FuncDef = Function
+type Program = ProgramWith Statement
+
+data FuncDefWith s = Function
   { _funcName :: Identifier,
-    _funcBody :: Block
+    _funcBody :: BlockWith s
   }
   deriving (Show, Eq)
 
-data BlockItem = S Statement | D Declaration
+type FuncDef = FuncDefWith Statement
+
+data BlockItemWith s = S s | D Declaration
   deriving (Show, Eq)
 
-type BlockItems = Seq.Seq BlockItem
+type BlockItem = BlockItemWith Statement
 
-data Block = Block BlockItems
+type BlockItemsWith s = Seq.Seq (BlockItemWith s)
+
+type BlockItems = BlockItemsWith Statement
+
+data BlockWith s = Block (BlockItemsWith s)
   deriving (Show, Eq)
+
+type Block = BlockWith Statement
 
 blockItemsAppend :: BlockItems -> BlockItem -> BlockItems
 blockItemsAppend = (Seq.|>)
@@ -99,6 +123,9 @@ data Declaration = Declaration
   }
   deriving (Show, Eq)
 
+data ForInit = InitDecl Declaration | InitExp (Maybe Exp)
+  deriving (Show, Eq)
+
 data Statement
   = Return Exp
   | Expression Exp
@@ -108,6 +135,22 @@ data Statement
         _else :: Maybe Statement
       }
   | Compound Block
+  | Break
+  | Continue
+  | While
+      { _condition :: Exp,
+        _body :: Statement
+      }
+  | DoWhile
+      { _body :: Statement,
+        _condition :: Exp
+      }
+  | For
+      { _fInit :: ForInit,
+        _fCondition :: Maybe Exp,
+        _fPost :: Maybe Exp,
+        _fBody :: Statement
+      }
   | Null
   deriving (Show, Eq)
 
@@ -217,6 +260,9 @@ takeToken = do
 evalParse :: Lexer.Tokens -> Expect Program
 evalParse = evalStateT parseProgram
 
+evalParseIO :: Lexer.Tokens -> IO Program
+evalParseIO = leftErrorIO evalParse
+
 -- | Parse a program
 --
 -- <program> ::= <function>
@@ -251,12 +297,12 @@ parseBlockItem = do
 --
 -- <block> ::= "{" { <block-item> } "}"
 parseBlock :: Parser Block
-parseBlock = do 
+parseBlock = do
   expect Lexer.LeftBrace
   body <- loop emptyBlockItem
   expect Lexer.RightBrace
   return $ Block body
- where 
+  where
     loop :: BlockItems -> Parser BlockItems
     loop functionBody = do
       nextToken <- peek
@@ -281,6 +327,31 @@ parseDeclaration = do
       takeToken
       return (Declaration lvalue Nothing)
     others -> throwExpectTokensError "parseDeclaration" (Lexer.tokensFromList [Lexer.Assign, Lexer.Semicolon]) others
+
+-- | 一个helper函数, 用来Parse可能的exp
+--
+--  need to specify which token marks the end of the optional expression
+-- [ <exp> ] token
+parseMaybeExpEndWith :: Lexer.Token -> Parser (Maybe Exp)
+parseMaybeExpEndWith token = do
+  nextToken <- peek
+  if nextToken == Just token
+    then do
+      takeToken
+      return Nothing
+    else do
+      e <- parseExp Lexer.minimumPrecedence
+      expect token
+      return $ Just e
+
+parseForInit :: Parser ForInit
+parseForInit = do
+  nextToken <- peek
+  case nextToken of
+    Just Lexer.IntKeyword -> InitDecl <$> parseDeclaration
+    _ -> do
+      me <- parseMaybeExpEndWith Lexer.Semicolon
+      return $ InitExp me
 
 -- | Parse a statement
 --
@@ -314,6 +385,36 @@ parseStatement = do
           If e s . Just <$> parseStatement
         _ -> return (If e s Nothing)
     Just Lexer.LeftBrace -> Compound <$> parseBlock
+    Just Lexer.BreakKeyword -> do
+      takeToken
+      expect Lexer.Semicolon
+      return Break
+    Just Lexer.ContinueKeyword -> do
+      takeToken
+      expect Lexer.Semicolon
+      return Continue
+    Just Lexer.WhileKeyword -> do
+      takeToken
+      expect Lexer.LeftParen
+      e <- parseExp Lexer.minimumPrecedence
+      expect Lexer.RightParen
+      While e <$> parseStatement
+    Just Lexer.DoKeyword -> do
+      takeToken
+      s <- parseStatement
+      expect Lexer.WhileKeyword
+      expect Lexer.LeftParen
+      e <- parseExp Lexer.minimumPrecedence
+      expect Lexer.RightParen
+      expect Lexer.Semicolon
+      return $ DoWhile s e
+    Just Lexer.ForKeyword -> do
+      takeToken
+      expect Lexer.LeftParen
+      fi <- parseForInit
+      me1 <- parseMaybeExpEndWith Lexer.Semicolon
+      me2 <- parseMaybeExpEndWith Lexer.RightParen
+      For fi me1 me2 <$> parseStatement
     Just _ -> do
       expression <- parseExp Lexer.minimumPrecedence
       expect Lexer.Semicolon

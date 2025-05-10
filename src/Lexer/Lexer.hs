@@ -22,6 +22,7 @@ module Lexer.Lexer
 
     -- * Lexer
     lexer,
+    lexerIO,
   )
 where
 
@@ -33,6 +34,7 @@ import qualified Data.Ord as Ord
 import qualified Data.Sequence as Seq
 import Text.Read (readMaybe)
 import Text.Regex.PCRE ((=~))
+import Utils.Base
 
 -- * 基本类型
 
@@ -111,6 +113,16 @@ data Token
     Question
   | -- | colon in a conditional expression
     Colon
+  | 
+    DoKeyword 
+  | 
+    WhileKeyword 
+  | 
+    ForKeyword 
+  | 
+    BreakKeyword 
+  | 
+    ContinueKeyword
   deriving (Show, Eq, Ord)
 
 -- | Tokens
@@ -271,6 +283,21 @@ questionRegex = "\\?"
 colonRegex :: TokenRegex
 colonRegex = "\\:"
 
+doRegex :: TokenRegex
+doRegex = "do"
+
+whileRegex :: TokenRegex
+whileRegex = "while"
+
+forRegex :: TokenRegex
+forRegex = "for"
+
+breakRegex :: TokenRegex
+breakRegex = "break"
+
+continueRegex :: TokenRegex
+continueRegex = "continue"
+
 -- | token的正则表达式
 tokenRegexes :: [(TokenRegex, Token)]
 tokenRegexes =
@@ -306,7 +333,12 @@ tokenRegexes =
           (ifKeywordRegex, IfKeyword),
           (elseKeywordRegex, ElseKeyword),
           (questionRegex, Question),
-          (colonRegex, Colon)
+          (colonRegex, Colon),
+          (doRegex, DoKeyword),
+          (whileRegex, WhileKeyword),
+          (forRegex, ForKeyword),
+          (breakRegex, BreakKeyword),
+          (continueRegex, ContinueKeyword)
         ]
 
 -- | Token是二元表达式
@@ -402,6 +434,11 @@ lenToken IfKeyword = 2
 lenToken ElseKeyword = 4
 lenToken Question = 1
 lenToken Colon = 1
+lenToken DoKeyword = 2
+lenToken WhileKeyword = 5
+lenToken ForKeyword = 3
+lenToken BreakKeyword = 5
+lenToken ContinueKeyword = 8
 
 -- | 如果标识符是关键字, 则将其视为关键字
 identifierToKeyword :: Token -> Token
@@ -411,6 +448,11 @@ identifierToKeyword (Identifier name)
   | name == "return" = ReturnKeyword
   | name == "if" = IfKeyword 
   | name == "else" = ElseKeyword
+  | name == "do" = DoKeyword 
+  | name == "while" = WhileKeyword
+  | name == "for" = ForKeyword
+  | name == "break" = BreakKeyword
+  | name == "continue" = ContinueKeyword
   | otherwise = Identifier name
 identifierToKeyword token = token
 
@@ -444,3 +486,6 @@ lexerWithState input = go (dropWhile isSpace input)
 -- | 词法分析器
 lexer :: CodeString -> Either LexerError Tokens
 lexer input = lexerWithState (dropWhile isSpace input) emptyToken
+
+lexerIO :: CodeString -> IO Tokens
+lexerIO = leftErrorIO lexer

@@ -1,13 +1,13 @@
 module Main (main) where
 
 import AssemblyGen.AssemblyGen (convertProgramWithFixedInstructions)
-import Lexer.Lexer (lexer)
-import Parser.Parser (evalParse)
+import Lexer.Lexer (lexerIO)
+import Parser.Parser (evalParseIO)
 import TACKY.TACKY
 import System.Environment (getArgs)
-import System.Exit (exitFailure)
 import Emission.Emission
 import System.FilePath (replaceExtension)
+import SemanticAnalysis.LoopLabeling
 import SemanticAnalysis.VariableResolution
 import qualified Data.Text.IO as TIO
 
@@ -17,21 +17,9 @@ main = do
   case args of
     [filePath] -> do
       content <- readFile filePath
-      case lexer content of
-        Right tokens -> case evalParse tokens of
-          Right ast' -> case resolveProgram ast' of 
-            Right ast -> do
-              let assembly = constructProgram (convertProgramWithFixedInstructions (genProgram ast))
-              let outputFilePath = replaceExtension filePath "s"
-              TIO.writeFile outputFilePath assembly
-              putStrLn $ "Assembly written to " ++ outputFilePath
-            Left err -> do 
-              print err 
-              exitFailure
-          Left err -> do
-            print err
-            exitFailure
-        Left err -> do
-          print err
-          exitFailure
+      ast <- lexerIO content >>= evalParseIO >>= resolveProgramIO >>= labelProgramIO
+      let assembly = constructProgram (convertProgramWithFixedInstructions (genLProgram ast)) 
+          outputFilePath = replaceExtension filePath "s"
+      TIO.writeFile outputFilePath assembly
+      putStrLn $ "Assembly written to " ++ outputFilePath
     _ -> putStrLn "Usage: hscc <file-path>"

@@ -1,12 +1,12 @@
 module Main (main) where
 
-import Lexer.Lexer (lexer)
-import Parser.Parser (evalParse)
+import Lexer.Lexer (lexerIO)
+import Parser.Parser (evalParseIO)
 import SemanticAnalysis.VariableResolution
 import System.Environment (getArgs)
-import System.Exit (exitFailure)
-import TACKY.TACKY (genProgram)
+import TACKY.TACKY (genLProgram)
 import Utils.Pretty (prettyPrint)
+import SemanticAnalysis.LoopLabeling
 
 main :: IO ()
 main = do
@@ -14,17 +14,7 @@ main = do
   case args of
     [filePath] -> do
       content <- readFile filePath
-      case lexer content of
-        Right tokens -> case evalParse tokens of
-          Right ast' -> case resolveProgram ast' of
-            Right ast -> putStrLn $ prettyPrint (genProgram ast)
-            Left err -> do
-              print err
-              exitFailure
-          Left err -> do
-            print err
-            exitFailure
-        Left err -> do
-          print err
-          exitFailure
+      ast <- lexerIO content >>= evalParseIO >>= resolveProgramIO >>= labelProgramIO
+      let ast' = genLProgram ast 
+      putStrLn $ prettyPrint ast'
     _ -> putStrLn "Usage: hsc-tacky <file-path>"
